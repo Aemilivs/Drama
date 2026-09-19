@@ -83,6 +83,7 @@ Cast ◀─ CastingDirector.cast(scene)    │
 - **The boundary is total.** Card normalisers coerce or ignore malformed fields rather than throwing, so bad model output cannot crash a performance.
 - **Every decision is an event.** `StageEvent[]` is the ordered, machine-readable trace.
 - **Context is a snapshot.** An actor receives `history` as a copy, so a retained `ActorContext` never grows to include turns recorded after the actor ran.
+- **Conflict is designed, not incidental.** A role's `stance` is validated: it must target a real actor, run after that actor produced, and yield an artifact a later step consumes.
 
 ## Executor resolution
 

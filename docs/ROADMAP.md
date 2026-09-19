@@ -20,12 +20,13 @@ Core primitive complete and tested.
 - [x] Personas and auditions: roles are functional, personas declare nothing, binding is discovered by asking and cached (`docs/actors.md`)
 - [x] Dressing wired into `StageManager`: a performance dresses its cast and folds audition events into the trace
 - [x] OpenCode agent adapter: `agents/*.md` → `Persona` (`src/opencode.ts`)
+- [x] First-class designed conflict: `Actor.stance`, validated as `dangling_stance` / `stance_before_target` / `unused_conflict_yield`
+- [x] A runnable, offline-safe LLM adapter example over `fetch` (`examples/llm/run.ts`)
+- [x] A persistent, file-backed `AuditionStore` for the host (`.opencode/lib/audition-store.ts`)
 
 ## Next (only if a real use case demands it)
 
-- [ ] A persistent `AuditionStore` in `.opencode/` so refusals survive sessions, plus an `Auditioner` that spawns the persona's subagent.
-- [ ] First-class conflict design on roles (`stance`), so "designed disagreement" is validated rather than implied.
-- [ ] A runnable LLM adapter example (one provider) guarded by an env var, kept out of the offline test path.
+- [ ] An `Auditioner` that spawns the persona's subagent (host-side; a project tool cannot spawn one itself, so this needs a plugin or an agent-driven flow).
 - [ ] A JSON (de)serialiser for `Performance` to support replay from a stored trace.
 - [ ] Optional parallel step execution for protocol steps with no shared artifact dependency.
 

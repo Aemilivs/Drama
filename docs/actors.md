@@ -29,6 +29,16 @@ interactionPermissions          source
 
 This is what keeps "persona ≠ capability" honest. It is enforced by `R-PERSONA-1` and `R-PERSONA-6`.
 
+## Designed conflict
+
+A role may declare its **stance** — the role it exists to challenge, and what the disagreement should yield:
+
+```ts
+stance: { opposes: "analysis", toYield: "Critique" }
+```
+
+This is what *"their conflicts produce the intended result"* looks like as code. The casting director validates the design: the target must exist (`dangling_stance`), the challenger must run after its target has produced (`stance_before_target`), and the conflict must yield something a later step consumes (`unused_conflict_yield`). A stance is a property of a derived role, not a catalogue entry — it does not fix which roles exist.
+
 ## Nothing is declared in advance
 
 A persona does **not** declare tags, suited roles, or a capability list. In life, performers do not know in advance how they will play a character — and a modest persona can suddenly play an unexpected role brilliantly. So the roster has no metadata to filter on, and casting never reads persona metadata to include or exclude a role.
@@ -123,7 +133,7 @@ Auditions and cache hits are recorded, so a casting decision can always be expla
 ## What lives where
 
 - **Core:** `src/persona.ts` (`Persona`, `Audition`, `Auditioner`, `AuditionStore`, `roleFingerprint`, `dressCast`, in-memory store) and `src/opencode.ts` (agent markdown → `Persona`). Pure, dependency-free, testable.
-- **Host (`.opencode/`):** the `Auditioner` that spawns subagents, and a persistent `AuditionStore`.
+- **Host (`.opencode/`):** the `Auditioner` that spawns subagents (not yet built — a project tool cannot spawn one itself), and a persistent `AuditionStore` (`.opencode/lib/audition-store.ts`).
 - **Stage:** `StageManager` dresses a cast when given `personas` + `auditioner`, and folds audition events into the performance trace.
 
 ## Open question

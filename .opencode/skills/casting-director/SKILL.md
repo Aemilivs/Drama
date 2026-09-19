@@ -15,7 +15,7 @@ You decide *who works on this specific scene and how they interact*. You do not 
 2. **Minimal sufficient cast.** "Do not add an actor unless its presence changes the solution space." If two roles could be one actor without losing separation that the criteria need, merge them.
 3. **No canonical cast.** Do not emit Planner → Researcher → Critic → Executor by reflex. Derive the cast from *this* scene; a two-actor cast is often right, and a one-actor cast is right when the task is genuinely single-capability.
 4. **Separate responsibilities only where it pays.** Add a challenger only when success criteria include robustness, hidden assumptions, or irreversible decisions — and give it a concrete falsification objective plus `challenge:<actor>` permission.
-5. **Deliberate disagreement is a tool.** If you add an adversary, name exactly which actor it may challenge and what would change its mind.
+5. **Deliberate disagreement is a tool.** If you add an adversary, give it a concrete falsification objective plus `challenge:<actor>` permission, and declare its **stance** so it can be validated: `opposes` must resolve to another actor (by name or capability), it must run after that actor has produced, and `toYield` must be consumed by a later step.
 6. **Actors need not be LLMs.** Use `kind: deterministic` or `kind: tool` for search, test suites, compilers, linters, database queries, calculators. A test runner is a better verifier than a model.
 7. **Artifacts over conversations.** Every actor declares `expectedOutput` artifact kinds; every step declares `consumes` and `produces`. Give artifacts concrete names (`MetricReport`, `Critique`, `RootCause`), not `Response`.
 8. **One synthesizer, and only when needed.** Add a synthesizer when there is more than one producer; give it `interactionPermissions: [synthesize]`. Otherwise the last producer produces the final artifact.
@@ -36,6 +36,9 @@ cast:
     knowledge: [<what this actor must know>]
     constraints: [<limits on this actor>]
     interactionPermissions: [<"challenge:<name>", "delegate:<name>", "synthesize">]
+    stance: <optional: designed opposition>
+      opposes: <other actor's name or capability>
+      toYield: <ArtifactKind the disagreement should yield>
     expectedOutput: [<ArtifactKind>]
     exitCondition: <optional: when this actor is done>
 

@@ -137,6 +137,8 @@ const researcher = functionActor({
 
 `renderActorPrompt` builds the prompt from the actor card plus its input artifacts, so the orchestration stays visible. Non-LLM actors need no adapter at all.
 
+A complete, runnable version — an OpenAI-compatible adapter over `fetch`, configured by `DRAMA_LLM_BASE_URL` / `DRAMA_LLM_API_KEY` / `DRAMA_LLM_MODEL`, and offline-safe with no config — lives in [`examples/llm/run.ts`](examples/llm/run.ts).
+
 ## OpenCode integration
 
 The two design steps are exposed as native OpenCode skills, discovered project-locally:
@@ -181,7 +183,7 @@ bun run example
 ## Testing
 
 ```bash
-bun test          # 118 tests: behavioural suite + formalized requirements
+bun test          # 131 tests: behavioural suite + formalized requirements
 bun run typecheck # optional; requires `bun install` for dev types
 ```
 
@@ -206,6 +208,7 @@ src/
   index.ts       public surface
 .opencode/skills/{scene-designer,casting-director}/SKILL.md
 examples/incident-rca/run.ts
+examples/llm/run.ts
 test/*.test.ts
 docs/architecture.md
 docs/actors.md

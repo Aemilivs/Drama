@@ -10,7 +10,7 @@
 import type { Diagnosis } from "./types";
 import { nextId } from "./types";
 import type { Scene } from "./scene";
-import { type Actor, type ActorKind, createActor } from "./actor";
+import { type Actor, type ActorKind, type ActorStance, createActor } from "./actor";
 import type { Evaluation } from "./evaluation";
 
 /**
@@ -46,7 +46,10 @@ export type CastIssueCode =
   | "unknown_actor"
   | "unproduced_input"
   | "empty_objective"
-  | "duplicate_actor";
+  | "duplicate_actor"
+  | "dangling_stance"
+  | "unused_conflict_yield"
+  | "stance_before_target";
 
 export interface CastIssue {
   severity: "error" | "warning";
@@ -109,6 +112,16 @@ function readStrings(value: unknown): string[] {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function readStance(value: unknown): ActorStance | undefined {
+  if (!isRecord(value)) return undefined;
+  const opposes = value.opposes;
+  if (typeof opposes !== "string" || opposes.length === 0) return undefined;
+  return {
+    opposes,
+    toYield: typeof value.toYield === "string" ? value.toYield : undefined,
+  };
 }
 
 function slug(text: string): string {
@@ -203,6 +216,7 @@ export interface ActorCard {
   expectedOutput?: string[] | string;
   produces?: string[] | string;
   exitCondition?: string;
+  stance?: ActorStance;
 }
 
 export interface ProtocolCard {
@@ -239,6 +253,7 @@ export function actorFromCard(card: ActorCard): Actor {
     interactionPermissions: readStrings(source.interactionPermissions),
     expectedOutput: readStrings(source.expectedOutput ?? source.produces),
     exitCondition: typeof source.exitCondition === "string" ? source.exitCondition : undefined,
+    stance: readStance(source.stance),
   });
 }
 
@@ -552,6 +567,53 @@ export class CastingDirector {
         }
       }
       for (const kind of step.produces) produced.add(kind);
+    }
+
+    const stepIndexByActor = new Map<string, number>();
+    cast.protocol.steps.forEach((step, index) => {
+      if (!stepIndexByActor.has(step.actor)) stepIndexByActor.set(step.actor, index);
+    });
+    for (const actor of cast.actors) {
+      const stance = actor.stance;
+      if (!stance) continue;
+      const targets = cast.actors.filter(
+        (candidate) =>
+          candidate.name !== actor.name &&
+          (candidate.name === stance.opposes || candidate.capabilities.includes(stance.opposes)),
+      );
+      if (targets.length === 0) {
+        issues.push({
+          severity: "error",
+          code: "dangling_stance",
+          message: `Actor "${actor.name}" is designed to challenge "${stance.opposes}", which no other actor provides.`,
+          actors: [actor.name],
+        });
+        continue;
+      }
+      const toYield = stance.toYield;
+      if (toYield && !cast.protocol.steps.some((step) => step.consumes.includes(toYield))) {
+        issues.push({
+          severity: "warning",
+          code: "unused_conflict_yield",
+          message: `Actor "${actor.name}" should yield "${toYield}", but no step consumes it.`,
+          actors: [actor.name],
+        });
+      }
+      const ownIndex = stepIndexByActor.get(actor.name);
+      const targetIndices = targets
+        .map((target) => stepIndexByActor.get(target.name))
+        .filter((index): index is number => index !== undefined);
+      if (ownIndex !== undefined && targetIndices.length > 0) {
+        const firstTarget = Math.min(...targetIndices);
+        if (ownIndex <= firstTarget) {
+          issues.push({
+            severity: "warning",
+            code: "stance_before_target",
+            message: `Actor "${actor.name}" challenges "${stance.opposes}" but runs before it produces anything to challenge.`,
+            actors: [actor.name, ...targets.map((target) => target.name)],
+          });
+        }
+      }
     }
 
     for (const finding of this.minimality(scene, cast).removable) {

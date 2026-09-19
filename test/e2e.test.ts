@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { runIncidentExample } from "../examples/incident-rca/run.ts";
+import { CastingDirector } from "../src/index.ts";
+import { buildCast, buildScene, runIncidentExample } from "../examples/incident-rca/run.ts";
 
 describe("incident root-cause example", () => {
   test("the cast converges on the evidence-backed cause the single answer misses", async () => {
@@ -18,5 +19,15 @@ describe("incident root-cause example", () => {
     expect(result.castScore.passed).toBe(4);
     expect(result.baselineScore.passed).toBeLessThan(result.castScore.passed);
     expect(result.baselineScore.namesSpecificCause).toBe(false);
+  });
+
+  test("the example's designed conflict validates cleanly", () => {
+    const issues = new CastingDirector().validate(buildScene(), buildCast());
+    expect(issues.filter((issue) => issue.severity === "error")).toHaveLength(0);
+    expect(issues.filter((issue) => issue.severity === "warning")).toHaveLength(0);
+    expect(buildCast().actors.find((actor) => actor.name === "skeptic")?.stance).toEqual({
+      opposes: "metrics_analysis",
+      toYield: "Critique",
+    });
   });
 });

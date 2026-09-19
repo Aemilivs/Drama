@@ -177,6 +177,8 @@ function skeptic() {
     capabilities: ["adversarial_review"],
     knowledge: ["How connection pools and bcrypt cost interact"],
     interactionPermissions: ["challenge:metrics-analyst", "challenge:change-researcher"],
+    // Designed disagreement: the skeptic exists to falsify the analysts' explanation.
+    stance: { opposes: "metrics_analysis", toYield: "Critique" },
     produces: "Critique",
     run: (ctx: ActorContext): ReturnType<typeof ok> => {
       const metrics = findInput<MetricReport>(ctx, "MetricReport")!;

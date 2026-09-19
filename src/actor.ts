@@ -28,6 +28,18 @@ export interface ActorOutput {
   error?: string;
 }
 
+/**
+ * A role's designed opposition: what it challenges, and what the disagreement
+ * should yield. Declared on the role so the casting director can validate that
+ * disagreement is intentional rather than incidental.
+ */
+export interface ActorStance {
+  /** The other actor's name, or a capability, that this actor challenges. */
+  opposes: string;
+  /** The artifact kind the disagreement should yield (e.g. "Critique"). */
+  toYield?: string;
+}
+
 export interface Actor {
   name: string;
   role: string;
@@ -44,6 +56,8 @@ export interface Actor {
   /** Artifact kinds this actor is expected to produce. */
   expectedOutput: string[];
   exitCondition?: string;
+  /** Designed disagreement: who this role challenges and what it should yield. */
+  stance?: ActorStance;
   /** The persona playing this role, once an audition has bound one. */
   binding?: ActorBinding;
   /** How the actor runs. Deterministic/tool actors must supply one. */
@@ -129,6 +143,7 @@ export function createActor(
     interactionPermissions: partial.interactionPermissions?.slice() ?? [],
     expectedOutput: partial.expectedOutput?.slice() ?? [],
     exitCondition: partial.exitCondition,
+    stance: partial.stance,
     binding: partial.binding,
     executor: partial.executor,
   };
@@ -159,6 +174,7 @@ export interface FunctionActorOptions
   knowledge?: string[];
   constraints?: string[];
   interactionPermissions?: string[];
+  stance?: ActorStance;
   produces?: string | string[];
   run: ActorExecutor;
 }
@@ -176,6 +192,7 @@ export function functionActor(options: FunctionActorOptions): Actor {
     knowledge: options.knowledge,
     constraints: options.constraints,
     interactionPermissions: options.interactionPermissions,
+    stance: options.stance,
     expectedOutput: options.produces
       ? Array.isArray(options.produces)
         ? options.produces
@@ -216,6 +233,14 @@ export function renderActorPrompt(ctx: ActorContext): ChatMessage[] {
   if (actor.constraints.length) system.push(`Constraints: ${actor.constraints.join("; ")}`);
   if (actor.interactionPermissions.length) {
     system.push(`Permissions: ${actor.interactionPermissions.join("; ")}`);
+  }
+  if (actor.stance) {
+    const { opposes, toYield } = actor.stance;
+    system.push(
+      `Designed opposition: challenge "${opposes}"${
+        toYield ? `, and the disagreement should yield ${toYield}` : ""
+      }`,
+    );
   }
   if (actor.expectedOutput.length) {
     system.push(`Produce artifact kind(s): ${actor.expectedOutput.join(", ")}`);

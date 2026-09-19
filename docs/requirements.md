@@ -121,6 +121,39 @@ An OpenCode agent is a persona: its description is a delegation trigger, its bod
 | R-OCAGENT-7 | Quotes are only stripped when they wrap the whole value. | An unquoted trailing apostrophe survives; a fully quoted scalar is unquoted. |
 | R-OCAGENT-8 | Leading blank lines and key case do not defeat the parser. | Blank lines before `---` still parse; `Description:`/`Mode:` are read. |
 
+## Designed conflict — `test/requirements/conflict.requirements.test.ts`
+
+A role may declare the one it challenges and what the disagreement should yield (`Actor.stance`). The casting director validates the design so that disagreement is intentional, not incidental.
+
+| ID | Requirement (abstract) | Concrete example |
+| --- | --- | --- |
+| R-CONFLICT-1 | A stance that targets nobody is an error. | `opposes: ghost_capability` → `dangling_stance`. |
+| R-CONFLICT-2 | A conflict that yields nothing anyone uses is a warning. | `toYield: UnusedKind` with no consumer → `unused_conflict_yield`. |
+| R-CONFLICT-3 | Challenging before the target produced is a warning. | The skeptic runs first → `stance_before_target`. |
+| R-CONFLICT-4 | A well-formed designed conflict is clean and reaches the prompt. | Zero issues; the system prompt states the opposition. |
+| R-CONFLICT-5 | A stance survives the cast card wire format. | `castFromCard` round-trips `stance`. |
+
+## LLM adapter — `test/requirements/llm.requirements.test.ts`
+
+The production path for real models is a plain `fetch` call to an OpenAI-compatible endpoint, configured from the environment and offline-safe (no config → the example explains itself).
+
+| ID | Requirement (abstract) | Concrete example |
+| --- | --- | --- |
+| R-LLM-1 | The adapter posts an OpenAI-compatible request and returns the content. | Fake `fetch` captures URL, `POST`, bearer auth, model and messages; content is returned. |
+| R-LLM-2 | Configuration comes from the environment and is optional. | Incomplete env → `undefined`; complete env → a function. |
+| R-LLM-3 | A model-backed performance runs end to end. | Fake model → `done`, an `Answer` artifact with the model's text. |
+| R-LLM-4 | A failing endpoint surfaces as an error, not a silent answer. | HTTP 500 → the error propagates. |
+
+## Persistent store — `test/requirements/audition-store.requirements.test.ts`
+
+The in-memory store is the default; the host may persist it so refusals and approaches survive sessions (`.opencode/lib/audition-store.ts`).
+
+| ID | Requirement (abstract) | Concrete example |
+| --- | --- | --- |
+| R-STORE-1 | A refusal survives a new store instance. | `put` then a fresh store reads the same entry, reason intact. |
+| R-STORE-2 | A missing or corrupt file yields an empty store. | Absent file and `{ not json` both → zero entries. |
+| R-STORE-3 | A persisted audition is a cache hit for the next dressing. | Second dressing makes no call and is bound from the file. |
+
 ## Property — `test/requirements/properties.requirements.test.ts`
 
 Seeded (`mulberry32`) so any failure is reproducible from its case index.

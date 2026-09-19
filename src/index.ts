@@ -37,6 +37,7 @@ export type {
   Actor,
   ActorKind,
   ActorBinding,
+  ActorStance,
   ActorContext,
   ActorExecutor,
   ActorOutput,
