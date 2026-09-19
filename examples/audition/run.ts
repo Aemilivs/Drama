@@ -102,6 +102,8 @@ export interface AuditionExampleResult {
   /** The deterministically bound cast. */
   dressed: DressedCast;
   binding: string;
+  /** Everyone who accepted the role, as recorded by the selector event. */
+  candidates: string[];
 }
 
 export async function runAuditionExample(): Promise<AuditionExampleResult> {
@@ -133,17 +135,22 @@ export async function runAuditionExample(): Promise<AuditionExampleResult> {
   const fingerprint = roleFingerprint(roleRefOf(reviewer));
   for (const audition of gathered) store.put(audition.persona, fingerprint, audition);
 
-  // 3. Bind deterministically; the auditioner must not be called.
+  // 3. Bind deterministically, choosing among every acceptor; all answers are
+  //    cached, so the auditioner must not be called.
   const dressed = await dressCast(cast, scene, {
     personas,
     auditionStore: store,
+    askAll: true,
     auditioner: () => {
       throw new Error("auditioner was called although every answer was cached");
     },
   });
 
   const binding = dressed.cast.actors[0]!.binding?.persona.name ?? "(none)";
-  return { gathered, dressed, binding };
+  const selected = dressed.events.find((event) => event.type === "persona_selected");
+  const candidates =
+    selected && selected.type === "persona_selected" ? selected.candidates : [];
+  return { gathered, dressed, binding, candidates };
 }
 
 if ((import.meta as { main?: boolean }).main) {
@@ -156,6 +163,7 @@ if ((import.meta as { main?: boolean }).main) {
     console.log(`  ${persona.name.padEnd(10)} ${audition.accepted ? "accepts" : "declines"}`);
     if (audition.approach) console.log(`             "${audition.approach}"`);
   }
-  console.log(`\nBound deterministically to: ${result.binding}`);
+  console.log(`\nCandidates: ${result.candidates.join(", " ) || "(none)"}`);
+  console.log(`Bound deterministically to: ${result.binding}`);
   console.log(`Not cast: ${result.dressed.unused.join(", ") || "(none)"}`);
 }

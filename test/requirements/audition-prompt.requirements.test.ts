@@ -108,12 +108,14 @@ describe("Casting call requirements", () => {
   });
 
   test("R-AUDITION-6 a recorded casting call binds deterministically from a warm store", async () => {
-    const { gathered, dressed, binding } = await runAuditionExample();
+    const { gathered, dressed, binding, candidates } = await runAuditionExample();
     expect(gathered).toHaveLength(3);
     expect(gathered.every((audition) => audition.accepted)).toBe(true);
     expect(gathered.every((audition) => (audition.approach ?? "").length > 0)).toBe(true);
     expect(binding).toBe("Vimes");
+    expect(candidates).toEqual(["Vimes", "Feegle", "Librarian"]);
     expect(dressed.uncast).toEqual([]);
+    expect(dressed.auditions).toHaveLength(3);
     expect(dressed.auditions.every((audition) => audition.cached)).toBe(true);
   });
 });

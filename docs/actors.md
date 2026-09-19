@@ -120,7 +120,13 @@ If many personas decline the same role, the problem is usually the **role**, not
 ## When several accept, and when nobody does
 
 - **Nobody accepts (or there is no persona for a role):** the role is played **without a persona** — a bare actor. The cast is still valid and the performance proceeds. The role is reported as `uncast`.
-- **Several accept:** the default is deterministic — roster order wins (first accept binds the role), and a persona may play more than one role. The cache makes this stable. An LLM "director chooses among acceptors" is an optional escalation, not the default, because every added decision costs reproducibility.
+- **Several accept:** how many are asked and who is chosen are two separate knobs.
+  - `askAll: false` (the default) stops as soon as every role has an acceptor — cheap.
+  - `askAll: true` asks everyone, so every approach is recorded and every acceptor becomes a candidate. Use it when the *approaches themselves* are the value.
+  - `select` chooses among the candidates. The default is roster order; it may return `undefined` to leave the role uncast, and it is where an LLM "director" would go.
+  - When more than one accepted, the choice is traced as `persona_selected` carrying the full candidate list — the alternatives are visible rather than silently discarded.
+
+  A persona may play more than one role, and the cache makes all of this stable.
 
 ## Reproducibility
 

@@ -126,6 +126,8 @@ export type {
   StoredAudition,
   AuditionStore,
   AuditionEvent,
+  AuditionCandidate,
+  Selector,
   DressOptions,
   DressedCast,
 } from "./persona";

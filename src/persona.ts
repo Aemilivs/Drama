@@ -165,16 +165,39 @@ export type AuditionEvent =
   | { type: "auditioned"; persona: string; role: string; accepted: boolean; reason?: string }
   | { type: "audition_cached"; persona: string; role: string; accepted: boolean }
   | { type: "persona_bound"; role: string; persona: string; approach?: string }
+  | { type: "persona_selected"; role: string; persona: string; candidates: string[] }
   | { type: "role_uncast"; role: string };
 
+/** A persona that accepted a role, offered to the selector. */
+export interface AuditionCandidate {
+  persona: Persona;
+  approach?: string;
+}
+
+/**
+ * Choose among the personas that accepted a role. Returning `undefined` leaves
+ * the role uncast. Defaults to roster order — the first acceptor.
+ */
+export type Selector = (
+  candidates: AuditionCandidate[],
+  role: RoleRef,
+) => Persona | undefined;
+
 export interface DressOptions {
-  /** The roster. Order is significant: first accept binds the role. */
+  /** The roster. Order is significant: it breaks ties. */
   personas: Persona[];
   auditioner: Auditioner;
   /** Where auditions are cached. Defaults to an in-memory store. */
   auditionStore?: AuditionStore;
   /** Hard cap on how many personas are asked. Defaults to the roster size. */
   maxAuditions?: number;
+  /**
+   * Ask every persona instead of stopping once every role has an acceptor.
+   * Costs more, but records every approach and offers every acceptor to `select`.
+   */
+  askAll?: boolean;
+  /** Choose among the personas that accepted. Defaults to roster order. */
+  select?: Selector;
   onEvent?: (event: AuditionEvent) => void;
 }
 
@@ -201,8 +224,14 @@ export async function dressCast(
   const store = options.auditionStore ?? createMemoryAuditionStore();
   const personas = options.personas.slice();
   const maxAuditions = options.maxAuditions ?? personas.length;
+  const askAll = options.askAll === true;
+  const select: Selector = options.select ?? ((candidates) => candidates[0]?.persona);
 
-  const bindings = new Map<string, ActorBinding>();
+  /** Everyone who accepted a role, in the order they were asked. */
+  const acceptors = new Map<
+    string,
+    { persona: Persona; audition: Audition; from: "audition" | "cache" }[]
+  >();
   const auditions: AuditionRecord[] = [];
   const events: AuditionEvent[] = [];
   let asked = 0;
@@ -212,20 +241,32 @@ export async function dressCast(
     options.onEvent?.(event);
   };
 
-  const openRoles = () => cast.actors.filter((actor) => !bindings.has(actor.name));
+  const accept = (
+    role: string,
+    persona: Persona,
+    audition: Audition,
+    from: "audition" | "cache",
+  ) => {
+    const list = acceptors.get(role) ?? [];
+    list.push({ persona, audition, from });
+    acceptors.set(role, list);
+  };
+
+  const filled = () => cast.actors.every((actor) => acceptors.has(actor.name));
+  const openRoles = () => cast.actors.filter((actor) => !acceptors.has(actor.name));
 
   for (const persona of personas) {
     if (asked >= maxAuditions) break;
-    const roles = openRoles();
+    // Asking everyone is the point of `askAll`; otherwise only open roles matter.
+    const roles = askAll ? cast.actors : openRoles();
     if (roles.length === 0) break;
 
     const toAsk: RoleRef[] = [];
     for (const actor of roles) {
-      const ref = roleRefOf(actor);
-      const fingerprint = roleFingerprint(ref);
+      const fingerprint = roleFingerprint(roleRefOf(actor));
       const cached = store.get(persona.id, fingerprint);
       if (!cached) {
-        toAsk.push(ref);
+        toAsk.push(roleRefOf(actor));
         continue;
       }
       auditions.push({ ...cached, role: actor.name, cached: true });
@@ -235,52 +276,63 @@ export async function dressCast(
         role: actor.name,
         accepted: cached.accepted,
       });
-      if (cached.accepted) {
-        bindings.set(actor.name, {
-          persona,
-          approach: cached.approach,
-          from: "cache",
-        });
+      if (cached.accepted) accept(actor.name, persona, cached, "cache");
+    }
+
+    if (toAsk.length > 0) {
+      const answers = await options.auditioner({ roles: toAsk, persona, scene });
+      asked += 1;
+      for (const answer of answers) {
+        const actor = cast.actors.find((candidate) => candidate.name === answer.role);
+        if (!actor) continue;
+        store.put(persona.id, roleFingerprint(roleRefOf(actor)), answer);
+        auditions.push({ ...answer, persona: persona.id, cached: false });
         emit({
-          type: "persona_bound",
-          role: actor.name,
+          type: "auditioned",
           persona: persona.id,
-          approach: cached.approach,
+          role: actor.name,
+          accepted: answer.accepted,
+          reason: answer.reason,
         });
+        if (answer.accepted) accept(actor.name, persona, answer, "audition");
       }
     }
 
-    if (toAsk.length === 0) continue;
+    if (!askAll && filled()) break;
+  }
 
-    const answers = await options.auditioner({ roles: toAsk, persona, scene });
-    asked += 1;
-
-    for (const answer of answers) {
-      const actor = cast.actors.find((candidate) => candidate.name === answer.role);
-      if (!actor) continue;
-      const fingerprint = roleFingerprint(roleRefOf(actor));
-      store.put(persona.id, fingerprint, answer);
-      auditions.push({ ...answer, persona: persona.id, cached: false });
+  const bindings = new Map<string, ActorBinding>();
+  for (const actor of cast.actors) {
+    const candidates = acceptors.get(actor.name) ?? [];
+    if (candidates.length === 0) continue;
+    const chosen = select(
+      candidates.map((candidate) => ({
+        persona: candidate.persona,
+        approach: candidate.audition.approach,
+      })),
+      roleRefOf(actor),
+    );
+    if (!chosen) continue;
+    const match =
+      candidates.find((candidate) => candidate.persona.id === chosen.id) ?? candidates[0]!;
+    bindings.set(actor.name, {
+      persona: match.persona,
+      approach: match.audition.approach,
+      from: match.from,
+    });
+    emit({
+      type: "persona_bound",
+      role: actor.name,
+      persona: match.persona.id,
+      approach: match.audition.approach,
+    });
+    if (candidates.length > 1) {
       emit({
-        type: "auditioned",
-        persona: persona.id,
+        type: "persona_selected",
         role: actor.name,
-        accepted: answer.accepted,
-        reason: answer.reason,
+        persona: match.persona.id,
+        candidates: candidates.map((candidate) => candidate.persona.id),
       });
-      if (answer.accepted && !bindings.has(actor.name)) {
-        bindings.set(actor.name, {
-          persona,
-          approach: answer.approach,
-          from: "audition",
-        });
-        emit({
-          type: "persona_bound",
-          role: actor.name,
-          persona: persona.id,
-          approach: answer.approach,
-        });
-      }
     }
   }
 

@@ -165,7 +165,19 @@ A project tool cannot spawn a subagent, so the audition itself is an orchestrati
 | R-AUDITION-3 | Unparseable output is a decline, never an invented acceptance. | Prose, empty text, broken JSON and a bare array all → decline with a reason. |
 | R-AUDITION-4 | A partial answer declines the roles it omits. | One role answered, another → decline. |
 | R-AUDITION-5 | Parsed answers drive dressing. | The accepted role binds; the omitted role is `uncast`. |
-| R-AUDITION-6 | A recorded casting call binds deterministically from a warm store. | Three real agent replies → Vimes bound, the others unused, all cached. |
+| R-AUDITION-6 | A recorded casting call binds deterministically from a warm store. | Three real agent replies → all three candidates traced, Vimes bound, the others unused. |
+
+## Selection among acceptors — `test/requirements/selection.requirements.test.ts`
+
+Once several personas accept, how many are asked and who is chosen are two separate knobs: `askAll` governs the asking, `select` governs the choice.
+
+| ID | Requirement (abstract) | Concrete example |
+| --- | --- | --- |
+| R-SELECT-1 | `askAll` gathers every acceptor and the selector chooses. | Three personas accept; a hook picks the last; all three answers recorded. |
+| R-SELECT-2 | The default choice is roster order, and the alternatives are traced. | Three accept → Ada bound; `persona_selected` lists all three candidates. |
+| R-SELECT-3 | A selector may leave the role uncast. | Hook returns `undefined` → no binding, role `uncast`, no `persona_selected`. |
+| R-SELECT-4 | Without `askAll`, auditioning stops once the role is filled. | Only the first persona is asked. |
+| R-SELECT-5 | A persona may accept more than one role. | One persona binds both roles of a two-role cast. |
 
 ## Property — `test/requirements/properties.requirements.test.ts`
 
