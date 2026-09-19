@@ -33,6 +33,9 @@ opencode.ts  agent markdown → Persona                     │
 stage.ts  StageManager, Performance, StageEvent           │
   imports: all of the above                               │
                                                           │
+serialize.ts  Performance JSON round-trip
+  imports: actor (type), cast (type), stage (type)
+
 trace.ts  formatPerformance, performanceTimeline          │
 index.ts  public surface (re-exports every module)        │
 ```
@@ -121,3 +124,7 @@ Cast (roles) ──▶ dressCast(cast, scene, { personas, auditioner, store }) �
 The store is keyed by `roleFingerprint` — the role's *content*, not its capability — so a refusal never becomes a declared incapacity, and a changed role spec is automatically a new question. A role nobody accepts stays a bare actor (`role_uncast`).
 
 `StageManager.perform` dresses automatically when a roster and an auditioner are supplied (`personas` + `auditioner` in `StageOptions`), and dresses again after every recast or redesign. Audition events are folded into the performance trace. Without a roster, behaviour is unchanged. See `docs/actors.md` and the `R-PERSONA-*` requirements.
+
+## Storing and replaying a performance
+
+A `Performance` is pure data, so `serializePerformance` writes a versioned JSON document and `deserializePerformance` reads it back. The one non-data field is `Actor.executor` — a function — which is dropped on write and re-attached on read from a registry keyed by actor name. The evaluator, casting director and auditioner live on the `StageManager`, not on the trace, so a replay re-supplies that machinery; the trace tells you exactly what happened, and the machinery lets you run it again.

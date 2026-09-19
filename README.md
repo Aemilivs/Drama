@@ -183,7 +183,7 @@ bun run example
 ## Testing
 
 ```bash
-bun test          # 150 tests: behavioural suite + formalized requirements
+bun test          # 156 tests: behavioural suite + formalized requirements
 bun run typecheck # optional; requires `bun install` for dev types
 ```
 
@@ -204,6 +204,7 @@ src/
   persona.ts     Persona, Audition, Auditioner, AuditionStore, dressCast
   opencode.ts    agent markdown → Persona adapter
   stage.ts       StageManager, Performance, recast/redesign loop, events (incl. auditions)
+  serialize.ts   Performance JSON round-trip and replay
   trace.ts       formatPerformance, performanceTimeline
   index.ts       public surface
 .opencode/skills/{scene-designer,casting-director}/SKILL.md

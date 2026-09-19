@@ -28,7 +28,7 @@ Core primitive complete and tested.
 
 ## Next (only if a real use case demands it)
 
-- [ ] A JSON (de)serialiser for `Performance` to support replay from a stored trace.
+- [x] A JSON (de)serialiser for `Performance` (`src/serialize.ts`): executors are re-attached by actor name on load, and a replay re-supplies the evaluator.
 - [ ] Optional parallel step execution for protocol steps with no shared artifact dependency.
 
 ## Explicit non-goals

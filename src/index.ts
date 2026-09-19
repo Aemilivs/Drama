@@ -146,3 +146,12 @@ export {
   personaFromOpencodeAgent,
   personasFromOpencodeAgents,
 } from "./opencode";
+
+export type { PerformanceDocument, DeserializeOptions } from "./serialize";
+export {
+  PERFORMANCE_FORMAT,
+  PERFORMANCE_FORMAT_VERSION,
+  serializePerformance,
+  deserializePerformance,
+  performanceFromDocument,
+} from "./serialize";

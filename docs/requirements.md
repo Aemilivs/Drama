@@ -187,6 +187,19 @@ Once several personas accept, how many are asked and who is chosen are two separ
 | R-SELECT-6 | The selection knobs are reachable through `StageManager`. | `askAll` + `select` on `StageOptions` → three asked, the hook's choice bound. |
 | R-SELECT-7 | A selector naming someone outside the candidates uncasts the role. | Hook returns an outsider → no binding, role `uncast`. |
 
+## Serialisation — `test/requirements/serialize.requirements.test.ts`
+
+A `Performance` is pure data and round-trips exactly, except for `Actor.executor` (a function), which is dropped on write and re-attached on read. The evaluator and auditioner are not part of a trace, so a replay re-supplies them.
+
+| ID | Requirement (abstract) | Concrete example |
+| --- | --- | --- |
+| R-SERIAL-1 | A performance round-trips through JSON. | Reloaded equals the JSON projection of the original. |
+| R-SERIAL-2 | Executors are dropped on write and re-attached on read. | No `"executor"` in the text; a registry re-binds by actor name. |
+| R-SERIAL-3 | Persona bindings survive the round-trip. | A dressed actor still reports `Ada` after reload. |
+| R-SERIAL-4 | A foreign or broken document is rejected clearly. | Non-JSON, wrong `format`, missing `formatVersion`, missing payload. |
+| R-SERIAL-5 | A reloaded trace renders identically. | `formatPerformance(reloaded) === formatPerformance(original)`. |
+| R-SERIAL-6 | A stored trace can be replayed with re-supplied machinery. | Reload, re-attach executor + evaluator, re-perform → same fingerprint. |
+
 ## Property — `test/requirements/properties.requirements.test.ts`
 
 Seeded (`mulberry32`) so any failure is reproducible from its case index.
