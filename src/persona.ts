@@ -171,7 +171,8 @@ export interface DressOptions {
   /** The roster. Order is significant: first accept binds the role. */
   personas: Persona[];
   auditioner: Auditioner;
-  store?: AuditionStore;
+  /** Where auditions are cached. Defaults to an in-memory store. */
+  auditionStore?: AuditionStore;
   /** Hard cap on how many personas are asked. Defaults to the roster size. */
   maxAuditions?: number;
   onEvent?: (event: AuditionEvent) => void;
@@ -197,7 +198,7 @@ export async function dressCast(
   scene: Scene,
   options: DressOptions,
 ): Promise<DressedCast> {
-  const store = options.store ?? createMemoryAuditionStore();
+  const store = options.auditionStore ?? createMemoryAuditionStore();
   const personas = options.personas.slice();
   const maxAuditions = options.maxAuditions ?? personas.length;
 

@@ -23,10 +23,10 @@ Core primitive complete and tested.
 - [x] First-class designed conflict: `Actor.stance`, validated as `dangling_stance` / `stance_before_target` / `unused_conflict_yield`
 - [x] A runnable, offline-safe LLM adapter example over `fetch` (`examples/llm/run.ts`)
 - [x] A persistent, file-backed `AuditionStore` for the host (`.opencode/lib/audition-store.ts`)
+- [x] A host casting call: `renderCastingCall` + `parseAuditionAnswer` (`.opencode/lib/audition-prompt.ts`), with the subagent spawn performed by the orchestrator — proven by a recorded, live run (`examples/audition/run.ts`) against Vimes, Feegle and Librarian.
 
 ## Next (only if a real use case demands it)
 
-- [ ] An `Auditioner` that spawns the persona's subagent (host-side; a project tool cannot spawn one itself, so this needs a plugin or an agent-driven flow).
 - [ ] A JSON (de)serialiser for `Performance` to support replay from a stored trace.
 - [ ] Optional parallel step execution for protocol steps with no shared artifact dependency.
 

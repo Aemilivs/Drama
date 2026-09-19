@@ -183,7 +183,7 @@ bun run example
 ## Testing
 
 ```bash
-bun test          # 131 tests: behavioural suite + formalized requirements
+bun test          # 137 tests: behavioural suite + formalized requirements
 bun run typecheck # optional; requires `bun install` for dev types
 ```
 
@@ -209,6 +209,7 @@ src/
 .opencode/skills/{scene-designer,casting-director}/SKILL.md
 examples/incident-rca/run.ts
 examples/llm/run.ts
+examples/audition/run.ts
 test/*.test.ts
 docs/architecture.md
 docs/actors.md

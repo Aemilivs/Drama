@@ -199,7 +199,7 @@ export class StageManager {
       const dressed = await dressCast(input, scene, {
         personas: opts.personas,
         auditioner: opts.auditioner,
-        store: opts.auditionStore,
+        auditionStore: opts.auditionStore,
         maxAuditions: opts.maxAuditions,
         onEvent: emit,
       });

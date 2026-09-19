@@ -154,6 +154,19 @@ The in-memory store is the default; the host may persist it so refusals and appr
 | R-STORE-2 | A missing or corrupt file yields an empty store. | Absent file and `{ not json` both → zero entries. |
 | R-STORE-3 | A persisted audition is a cache hit for the next dressing. | Second dressing makes no call and is bound from the file. |
 
+## Host casting call — `test/requirements/audition-prompt.requirements.test.ts`
+
+A project tool cannot spawn a subagent, so the audition itself is an orchestration step: the host renders the casting call, spawns the persona, and parses the reply into `Audition`s. The pure halves live in `.opencode/lib/audition-prompt.ts`; a live, recorded run is in `examples/audition/run.ts`.
+
+| ID | Requirement (abstract) | Concrete example |
+| --- | --- | --- |
+| R-AUDITION-1 | The casting call describes every role and demands JSON only. | Scene, persona, each role's capability/objective/artifact/constraints, and the `"auditions"` schema. |
+| R-AUDITION-2 | An answer wrapped in prose or a fence is still parsed. | `Sure…```json {…}```` → accepted, with approach. |
+| R-AUDITION-3 | Unparseable output is a decline, never an invented acceptance. | Prose, empty text, broken JSON and a bare array all → decline with a reason. |
+| R-AUDITION-4 | A partial answer declines the roles it omits. | One role answered, another → decline. |
+| R-AUDITION-5 | Parsed answers drive dressing. | The accepted role binds; the omitted role is `uncast`. |
+| R-AUDITION-6 | A recorded casting call binds deterministically from a warm store. | Three real agent replies → Vimes bound, the others unused, all cached. |
+
 ## Property — `test/requirements/properties.requirements.test.ts`
 
 Seeded (`mulberry32`) so any failure is reproducible from its case index.
@@ -187,6 +200,7 @@ Requirements are not just documentation — writing them surfaces bugs. So far:
 - **R-PERSONA-16 caught a stale binding.** Because `CastingDirector` clones actors (including their `binding`) on recast, re-dressing could leave a role bound to a persona that no longer accepted it, and the role was omitted from `uncast`. `dressCast` now strips incoming bindings before dressing.
 - **R-PERSONA-17 caught an incomplete fingerprint.** `roleFingerprint` omitted the slot name, so two differently named roles with identical content shared a cache entry and a cache hit was labelled with the wrong role. The name is now hashed and cached records are relabelled to the role they were applied to.
 - **R-OCAGENT-7/8 hardened the adapter.** A single leading *or* trailing quote was stripped (corrupting unquoted scalars), and frontmatter after leading blank lines or with uppercase keys was silently skipped.
+- **The live casting call surfaced a naming trap.** `dressCast` took `store` while `StageOptions` took `auditionStore`; passing the documented name silently used an empty store and re-auditioned (the example threw with a full cache). Both now use `auditionStore`. This is the kind of bug only an end-to-end run finds — the unit tests used the short name consistently and stayed green.
 
 ## Adding a requirement
 

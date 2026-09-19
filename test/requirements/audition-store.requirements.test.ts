@@ -81,7 +81,7 @@ describe("Persistent audition store requirements", () => {
       await dressCast(cast(), scene(), {
         personas: [ada],
         auditioner,
-        store: createJsonFileAuditionStore(file),
+        auditionStore: createJsonFileAuditionStore(file),
       });
       expect(calls).toBe(1);
 
@@ -89,7 +89,7 @@ describe("Persistent audition store requirements", () => {
       const second = await dressCast(cast(), scene(), {
         personas: [ada],
         auditioner,
-        store: createJsonFileAuditionStore(file),
+        auditionStore: createJsonFileAuditionStore(file),
       });
       expect(calls).toBe(1);
       expect(second.cast.actors[0]!.binding?.persona.id).toBe("ada");

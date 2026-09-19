@@ -218,10 +218,10 @@ describe("Persona and audition requirements", () => {
     const { auditioner, calls } = recorder((_persona, openRoles) =>
       openRoles.map((role) => ({ role: role.name, persona: "ada", accepted: true })),
     );
-    await dressCast(roles(), scene(), { personas: [ada], auditioner, store });
+    await dressCast(roles(), scene(), { personas: [ada], auditioner, auditionStore: store });
     expect(calls).toHaveLength(1);
 
-    const second = await dressCast(roles(), scene(), { personas: [ada], auditioner, store });
+    const second = await dressCast(roles(), scene(), { personas: [ada], auditioner, auditionStore: store });
     expect(calls).toHaveLength(1); // unchanged: everything was cached
     expect(second.cast.actors.every((actor) => actor.binding?.persona.id === "ada")).toBe(true);
     expect(second.auditions.every((audition) => audition.cached)).toBe(true);
@@ -232,7 +232,7 @@ describe("Persona and audition requirements", () => {
     const { auditioner } = recorder(() => [
       { role: "researcher", persona: "ada", accepted: false, reason: "no metrics tool" },
     ]);
-    await dressCast(roles(), scene(), { personas: [ada], auditioner, store });
+    await dressCast(roles(), scene(), { personas: [ada], auditioner, auditionStore: store });
 
     // Same capability, different formulation: a different question, asked again.
     const researcherB = functionActor({
@@ -252,7 +252,7 @@ describe("Persona and audition requirements", () => {
       askedAgain = true;
       return [{ role: "researcher", persona: "ada", accepted: true }];
     };
-    const out = await dressCast(castB, scene(), { personas: [ada], auditioner: auditionerB, store });
+    const out = await dressCast(castB, scene(), { personas: [ada], auditioner: auditionerB, auditionStore: store });
     expect(askedAgain).toBe(true);
     expect(out.cast.actors[0]!.binding?.persona.id).toBe("ada");
   });
@@ -262,7 +262,7 @@ describe("Persona and audition requirements", () => {
     const { auditioner, calls } = recorder(() => [
       { role: "researcher", persona: "ada", accepted: false },
     ]);
-    await dressCast(roles(), scene(), { personas: [ada], auditioner, store });
+    await dressCast(roles(), scene(), { personas: [ada], auditioner, auditionStore: store });
     expect(calls).toHaveLength(1);
 
     const changed = roles();
@@ -270,7 +270,7 @@ describe("Persona and audition requirements", () => {
     const { auditioner: auditioner2, calls: calls2 } = recorder(() => [
       { role: "researcher", persona: "ada", accepted: true },
     ]);
-    const out = await dressCast(changed, scene(), { personas: [ada], auditioner: auditioner2, store });
+    const out = await dressCast(changed, scene(), { personas: [ada], auditioner: auditioner2, auditionStore: store });
 
     expect(calls2.length).toBeGreaterThanOrEqual(1);
     expect(out.cast.actors.find((actor) => actor.name === "researcher")!.binding?.persona.id).toBe(
@@ -283,7 +283,7 @@ describe("Persona and audition requirements", () => {
     const { auditioner } = recorder((_persona, openRoles) => [
       { role: "researcher", persona: "ada", accepted: false, reason: "lacks the metrics tool" },
     ]);
-    await dressCast(roles(), scene(), { personas: [ada], auditioner, store });
+    await dressCast(roles(), scene(), { personas: [ada], auditioner, auditionStore: store });
 
     const stored = store.all();
     expect(stored).toHaveLength(1);
@@ -316,8 +316,8 @@ describe("Persona and audition requirements", () => {
     const { auditioner } = recorder((_persona, openRoles) =>
       openRoles.map((role) => ({ role: role.name, persona: "ada", accepted: true })),
     );
-    await dressCast(roles(), scene(), { personas: [ada], auditioner, store });
-    const second = await dressCast(roles(), scene(), { personas: [ada], auditioner, store });
+    await dressCast(roles(), scene(), { personas: [ada], auditioner, auditionStore: store });
+    const second = await dressCast(roles(), scene(), { personas: [ada], auditioner, auditionStore: store });
 
     expect(second.auditions.length).toBeGreaterThan(0);
     expect(second.auditions.every((audition) => audition.cached)).toBe(true);
@@ -426,7 +426,7 @@ describe("Persona and audition requirements", () => {
     const first = await dressCast(roles(), scene(), {
       personas: [ada],
       auditioner: accepting.auditioner,
-      store,
+      auditionStore: store,
     });
     expect(first.cast.actors.find((actor) => actor.name === "researcher")!.binding?.persona.id).toBe(
       "ada",
@@ -444,7 +444,7 @@ describe("Persona and audition requirements", () => {
     const second = await dressCast(first.cast, scene(), {
       personas: [ada],
       auditioner: declining.auditioner,
-      store: createMemoryAuditionStore(),
+      auditionStore: createMemoryAuditionStore(),
     });
     expect(second.cast.actors.find((actor) => actor.name === "researcher")!.binding).toBeUndefined();
     expect(second.uncast).toContain("researcher");
@@ -472,14 +472,14 @@ describe("Persona and audition requirements", () => {
     const { auditioner, calls } = recorder((_persona, openRoles) =>
       openRoles.map((role) => ({ role: role.name, persona: "ada", accepted: true })),
     );
-    await dressCast(castA, scene(), { personas: [ada], auditioner, store });
+    await dressCast(castA, scene(), { personas: [ada], auditioner, auditionStore: store });
     expect(calls).toHaveLength(1);
 
-    const second = await dressCast(castB, scene(), { personas: [ada], auditioner, store });
+    const second = await dressCast(castB, scene(), { personas: [ada], auditioner, auditionStore: store });
     expect(calls).toHaveLength(2); // a different slot name is a different question
     expect(second.cast.actors[0]!.binding?.persona.id).toBe("ada");
 
-    const third = await dressCast(castB, scene(), { personas: [ada], auditioner, store });
+    const third = await dressCast(castB, scene(), { personas: [ada], auditioner, auditionStore: store });
     expect(third.auditions[0]!.cached).toBe(true);
     expect(third.auditions[0]!.role).toBe("lead");
   });
