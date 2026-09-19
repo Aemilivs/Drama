@@ -200,6 +200,20 @@ A `Performance` is pure data and round-trips exactly, except for `Actor.executor
 | R-SERIAL-5 | A reloaded trace renders identically. | `formatPerformance(reloaded) === formatPerformance(original)`. |
 | R-SERIAL-6 | A stored trace can be replayed with re-supplied machinery. | Reload, re-attach executor + evaluator, re-perform → same fingerprint. |
 
+## Parallel steps — `test/requirements/parallel.requirements.test.ts`
+
+Opt-in (`parallel: true`). Independent consecutive steps run in waves; a wave shares one history snapshot, and turns, artifacts and events are still recorded in declaration order. Off by default, where the cap is one step per wave and behaviour is identical to a simple loop.
+
+| ID | Requirement (abstract) | Concrete example |
+| --- | --- | --- |
+| R-PARALLEL-1 | Without the flag, execution stays sequential. | `maxInFlight` 1; history lengths 0, 1, 2. |
+| R-PARALLEL-2 | Independent consecutive steps run concurrently. | Two `consumes: []` steps overlap; `maxInFlight` 2. |
+| R-PARALLEL-3 | A dependent step never overlaps its producers. | The consumer of `A,B` starts only after both finish. |
+| R-PARALLEL-4 | Turns, artifacts and events stay in declaration order. | `["first","second","third"]` despite concurrency. |
+| R-PARALLEL-5 | A wave shares one history snapshot. | Peers see history 0; the dependent step sees 2. |
+| R-PARALLEL-6 | A required failure halts later waves; an optional one does not. | Required → consumer never runs; optional → it does. |
+| R-PARALLEL-7 | A parallel run is as reproducible as a sequential one. | Two runs give the same turns and artifact kinds. |
+
 ## Property — `test/requirements/properties.requirements.test.ts`
 
 Seeded (`mulberry32`) so any failure is reproducible from its case index.

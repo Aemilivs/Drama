@@ -183,7 +183,7 @@ bun run example
 ## Testing
 
 ```bash
-bun test          # 156 tests: behavioural suite + formalized requirements
+bun test          # 163 tests: behavioural suite + formalized requirements
 bun run typecheck # optional; requires `bun install` for dev types
 ```
 

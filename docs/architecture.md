@@ -87,6 +87,7 @@ Cast ◀─ CastingDirector.cast(scene)    │
 - **Every decision is an event.** `StageEvent[]` is the ordered, machine-readable trace.
 - **Context is a snapshot.** An actor receives `history` as a copy, so a retained `ActorContext` never grows to include turns recorded after the actor ran.
 - **Conflict is designed, not incidental.** A role's `stance` is validated: it must target a real actor, run after that actor produced, and yield an artifact a later step consumes.
+- **Parallelism is opt-in and order-preserving.** With `parallel: true`, independent consecutive steps run in waves; a wave shares one history snapshot, and turns, artifacts and events are recorded in declaration order. Executors and tools must tolerate concurrency.
 
 ## Executor resolution
 

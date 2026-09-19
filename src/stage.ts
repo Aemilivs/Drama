@@ -19,7 +19,7 @@ import type {
   ToolRegistry,
 } from "./actor";
 import { createLlmExecutor, createToolRegistry, failed } from "./actor";
-import type { Cast } from "./cast";
+import type { Cast, ProtocolStep } from "./cast";
 import { CastingDirector } from "./cast";
 import type { ActorFailure, Evaluation } from "./evaluation";
 import { Evaluator } from "./evaluation";
@@ -94,6 +94,13 @@ export interface StageOptions {
   askAll?: boolean;
   /** Choose among the personas that accepted. Defaults to roster order. */
   select?: Selector;
+  /**
+   * Run independent consecutive steps concurrently, in waves. Off by default.
+   * Turns, artifacts and events are still recorded in declaration order, and a
+   * wave shares one history snapshot. Executors and tools must tolerate being
+   * run concurrently.
+   */
+  parallel?: boolean;
   onEvent?: (event: StageEvent) => void;
 }
 
@@ -116,6 +123,19 @@ function messageOf(error: unknown): string {
 function selectInputs(artifacts: Artifact[], consumes: string[]): Artifact[] {
   if (consumes.length === 0) return [];
   return artifacts.filter((item) => consumes.includes(item.kind));
+}
+
+interface PreparedStep {
+  step: ProtocolStep;
+  actor?: Actor;
+  inputs: Artifact[];
+}
+
+interface StepOutcome {
+  prepared: PreparedStep;
+  output?: ActorOutput;
+  startedAt?: number;
+  endedAt?: number;
 }
 
 export class StageManager {
@@ -146,6 +166,7 @@ export class StageManager {
       maxAuditions: options.maxAuditions,
       askAll: options.askAll,
       select: options.select,
+      parallel: options.parallel,
       onEvent: options.onEvent,
     };
   }
@@ -246,90 +267,123 @@ export class StageManager {
         decision: null,
       };
 
-      for (const step of cast.protocol.steps) {
-        const actor = cast.actors.find((candidate) => candidate.name === step.actor);
-        if (!actor) {
-          const error = `step "${step.id}" references unknown actor "${step.actor}"`;
-          record.failures.push({ actor: step.actor, step: step.id, error });
+      const maxWaveSize = opts.parallel ? Number.POSITIVE_INFINITY : 1;
+      const remaining = [...cast.protocol.steps];
+      const produced = new Set<string>();
+      let halted = false;
+
+      while (remaining.length > 0 && !halted) {
+        // Take the longest prefix whose inputs are already available. With
+        // `parallel` off the cap is 1, so this is exactly the sequential order.
+        const wave: ProtocolStep[] = [];
+        for (const step of remaining) {
+          if (wave.length >= maxWaveSize) break;
+          if (!step.consumes.every((kind) => produced.has(kind))) break;
+          wave.push(step);
+        }
+        if (wave.length === 0) wave.push(remaining[0]!);
+
+        const prepared: PreparedStep[] = wave.map((step) => {
+          const actor = cast.actors.find((candidate) => candidate.name === step.actor);
+          if (!actor) return { step, inputs: [] };
+          const inputs = selectInputs(artifacts, step.consumes);
           emit({
-            type: "actor_failed",
+            type: "actor_activated",
             iteration: iterationIndex,
             step: step.id,
-            actor: step.actor,
-            error,
+            actor: actor.name,
+            inputIds: inputs.map((item) => item.id),
           });
-          if (!step.optional) break;
-          continue;
-        }
-
-        const inputs = selectInputs(artifacts, step.consumes);
-        emit({
-          type: "actor_activated",
-          iteration: iterationIndex,
-          step: step.id,
-          actor: actor.name,
-          inputIds: inputs.map((item) => item.id),
+          return { step, actor, inputs };
         });
 
-        const startedAt = this.clock();
-        let output: ActorOutput;
-        try {
-          const executor = this.resolveExecutor(actor, opts);
-          output = await executor({
-            scene,
-            actor,
-            instruction: step.instruction,
-            inputs,
-            history: turns.slice(),
-            tools: opts.tools ?? createToolRegistry(),
-            iteration: iterationIndex,
-          });
-          if (!output || typeof output !== "object") {
-            output = failed("executor returned no output");
+        // Every actor in a wave sees the same history, taken at wave start.
+        const history = turns.slice();
+        const outcomes: StepOutcome[] = await Promise.all(
+          prepared.map(async (item): Promise<StepOutcome> => {
+            if (!item.actor) return { prepared: item };
+            const startedAt = this.clock();
+            let output: ActorOutput;
+            try {
+              const executor = this.resolveExecutor(item.actor, opts);
+              output = await executor({
+                scene,
+                actor: item.actor,
+                instruction: item.step.instruction,
+                inputs: item.inputs,
+                history,
+                tools: opts.tools ?? createToolRegistry(),
+                iteration: iterationIndex,
+              });
+              if (!output || typeof output !== "object") {
+                output = failed("executor returned no output");
+              }
+            } catch (error) {
+              output = failed(messageOf(error));
+            }
+            return { prepared: item, output, startedAt, endedAt: this.clock() };
+          }),
+        );
+
+        // Record in declaration order, so the trace stays deterministic.
+        for (const outcome of outcomes) {
+          const { step, actor, inputs } = outcome.prepared;
+          if (!actor) {
+            const error = `step "${step.id}" references unknown actor "${step.actor}"`;
+            record.failures.push({ actor: step.actor, step: step.id, error });
+            emit({
+              type: "actor_failed",
+              iteration: iterationIndex,
+              step: step.id,
+              actor: step.actor,
+              error,
+            });
+            if (!step.optional) halted = true;
+            continue;
           }
-        } catch (error) {
-          output = failed(messageOf(error));
-        }
-        const endedAt = this.clock();
 
-        const turn: ActorTurn = {
-          id: nextId("turn"),
-          iteration: iterationIndex,
-          step: step.id,
-          actor: actor.name,
-          instruction: step.instruction,
-          inputIds: inputs.map((item) => item.id),
-          output,
-          startedAt,
-          endedAt,
-          durationMs: endedAt - startedAt,
-        };
-        record.turns.push(turn);
-        turns.push(turn);
-
-        if (output.status === "failed") {
-          const error = output.error ?? "actor failed";
-          record.failures.push({ actor: actor.name, step: step.id, error });
-          emit({
-            type: "actor_failed",
+          const output = outcome.output!;
+          const turn: ActorTurn = {
+            id: nextId("turn"),
             iteration: iterationIndex,
             step: step.id,
             actor: actor.name,
-            error,
-          });
-          if (!step.optional) break;
-        } else {
-          artifacts.push(...output.artifacts);
-          emit({
-            type: "actor_output",
-            iteration: iterationIndex,
-            step: step.id,
-            actor: actor.name,
-            artifactIds: output.artifacts.map((item) => item.id),
-          });
+            instruction: step.instruction,
+            inputIds: inputs.map((item) => item.id),
+            output,
+            startedAt: outcome.startedAt!,
+            endedAt: outcome.endedAt!,
+            durationMs: outcome.endedAt! - outcome.startedAt!,
+          };
+          record.turns.push(turn);
+          turns.push(turn);
+
+          if (output.status === "failed") {
+            const error = output.error ?? "actor failed";
+            record.failures.push({ actor: actor.name, step: step.id, error });
+            emit({
+              type: "actor_failed",
+              iteration: iterationIndex,
+              step: step.id,
+              actor: actor.name,
+              error,
+            });
+            if (!step.optional) halted = true;
+          } else {
+            artifacts.push(...output.artifacts);
+            emit({
+              type: "actor_output",
+              iteration: iterationIndex,
+              step: step.id,
+              actor: actor.name,
+              artifactIds: output.artifacts.map((item) => item.id),
+            });
+          }
         }
+
+        for (const step of wave) for (const kind of step.produces) produced.add(kind);
+        remaining.splice(0, wave.length);
       }
-
       const evaluation = await this.evaluator.evaluate({
         scene,
         cast,

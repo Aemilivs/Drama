@@ -29,7 +29,11 @@ Core primitive complete and tested.
 ## Next (only if a real use case demands it)
 
 - [x] A JSON (de)serialiser for `Performance` (`src/serialize.ts`): executors are re-attached by actor name on load, and a replay re-supplies the evaluator.
-- [ ] Optional parallel step execution for protocol steps with no shared artifact dependency.
+- [x] Optional parallel step execution: `parallel: true` runs independent consecutive steps in waves, order-preserving and opt-in (`R-PARALLEL-*`).
+
+## Next
+
+Nothing is planned. The three items above were the deferred list; each is now done or explicitly not required. What would justify new work is a concrete scene that the framework cannot express today.
 
 ## Explicit non-goals
 
