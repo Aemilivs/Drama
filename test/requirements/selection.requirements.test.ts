@@ -1,10 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import {
+  Evaluator,
+  StageManager,
+  artifact,
   createActor,
   createCast,
   createPersona,
   createProtocol,
+  criterionEvaluator,
   dressCast,
+  ok,
   sceneFromCard,
 } from "../../src/index.ts";
 import type { Audition, Auditioner, Cast, Persona, RoleRef } from "../../src/index.ts";
@@ -104,6 +109,46 @@ describe("Selection among acceptors", () => {
     const { auditioner, calls } = acceptAll();
     await dressCast(cast(), scene(), { personas: [ada, bob, carol], auditioner });
     expect(calls).toHaveLength(1); // bob and carol are never asked
+  });
+
+  test("R-SELECT-7 a selector naming someone outside the candidates uncasts the role", async () => {
+    const { auditioner } = acceptAll();
+    const outsider = createPersona({ id: "zed", name: "Zed" });
+    const out = await dressCast(cast(), scene(), {
+      personas: [ada],
+      auditioner,
+      select: () => outsider,
+    });
+    expect(out.cast.actors[0]!.binding).toBeUndefined();
+    expect(out.uncast).toEqual(["reviewer"]);
+  });
+
+  test("R-SELECT-6 the selection knobs are reachable through StageManager", async () => {
+    const { auditioner, calls } = acceptAll();
+    const s = scene();
+    const evaluator = new Evaluator(
+      criterionEvaluator([
+        {
+          criterion: s.successCriteria[0]!,
+          check: (ctx) =>
+            ctx.artifacts.some((item) => item.kind === "Review")
+              ? { status: "pass" as const, evidence: "ok" }
+              : { status: "fail" as const, evidence: "no review" },
+        },
+      ]),
+    );
+    const performance = await new StageManager({
+      evaluator,
+      personas: [ada, bob, carol],
+      auditioner,
+      askAll: true,
+      select: (candidates) => candidates.at(-1)!.persona,
+      executors: { reviewer: () => ok([artifact("reviewer", "Review", "done")]) },
+    }).perform(s, cast());
+
+    expect(calls).toHaveLength(3); // everyone asked through the stage
+    expect(performance.cast.actors[0]!.binding?.persona.id).toBe("carol");
+    expect(performance.events.some((event) => event.type === "persona_selected")).toBe(true);
   });
 
   test("R-SELECT-5 a persona may accept more than one role", async () => {

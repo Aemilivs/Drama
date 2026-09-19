@@ -67,18 +67,44 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
     : undefined;
 }
 
+function firstJsonObject(text: string): unknown {
+  for (let start = text.indexOf("{"); start !== -1; start = text.indexOf("{", start + 1)) {
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+    for (let index = start; index < text.length; index += 1) {
+      const character = text[index]!;
+      if (inString) {
+        if (escaped) escaped = false;
+        else if (character === "\\") escaped = true;
+        else if (character === '"') inString = false;
+        continue;
+      }
+      if (character === '"') {
+        inString = true;
+      } else if (character === "{") {
+        depth += 1;
+      } else if (character === "}") {
+        depth -= 1;
+        if (depth === 0) {
+          try {
+            return JSON.parse(text.slice(start, index + 1));
+          } catch {
+            break; // not valid here; try the next opening brace
+          }
+        }
+      }
+    }
+  }
+  return undefined;
+}
+
 function extractJson(text: string): unknown {
   const fenced = /```(?:json)?\s*([\s\S]*?)```/i.exec(text);
   for (const candidate of [fenced?.[1], text]) {
     if (!candidate) continue;
-    const start = candidate.indexOf("{");
-    const end = candidate.lastIndexOf("}");
-    if (start === -1 || end <= start) continue;
-    try {
-      return JSON.parse(candidate.slice(start, end + 1));
-    } catch {
-      // try the next candidate
-    }
+    const parsed = firstJsonObject(candidate);
+    if (parsed !== undefined) return parsed;
   }
   return undefined;
 }

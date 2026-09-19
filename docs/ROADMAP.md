@@ -24,7 +24,7 @@ Core primitive complete and tested.
 - [x] A runnable, offline-safe LLM adapter example over `fetch` (`examples/llm/run.ts`)
 - [x] A persistent, file-backed `AuditionStore` for the host (`.opencode/lib/audition-store.ts`)
 - [x] A host casting call: `renderCastingCall` + `parseAuditionAnswer` (`.opencode/lib/audition-prompt.ts`), with the subagent spawn performed by the orchestrator — proven by a recorded, live run (`examples/audition/run.ts`) against Vimes, Feegle and Librarian.
-- [x] Selection among acceptors: `askAll` gathers every approach and a `select` hook chooses, with the choice traced (`persona_selected`).
+- [x] Selection among acceptors: `askAll` gathers every approach and a `select` hook chooses, with the choice traced (`persona_selected`) and both knobs exposed through `StageManager`.
 
 ## Next (only if a real use case demands it)
 

@@ -105,6 +105,7 @@ See [`docs/actors.md`](actors.md) for the model. Roles are functional; personas 
 | R-PERSONA-15 | A recast dresses the newly added roles. | The added `compliance` actor is bound; dressing runs again after the recast. |
 | R-PERSONA-16 | Re-dressing never keeps a stale binding. | A previously bound actor that is now declined has its binding cleared and is reported `uncast`. |
 | R-PERSONA-17 | The fingerprint includes the slot name. | Identical content under a different name is a different question and is asked again; a cache hit is labelled with the role it was applied to. |
+| R-PERSONA-18 | An answer about a role the persona was not asked about is ignored. | A stray answer for a cached role is neither recorded nor cached. |
 
 ## OpenCode agent adapter — `test/requirements/opencode.requirements.test.ts`
 
@@ -132,6 +133,9 @@ A role may declare the one it challenges and what the disagreement should yield 
 | R-CONFLICT-3 | Challenging before the target produced is a warning. | The skeptic runs first → `stance_before_target`. |
 | R-CONFLICT-4 | A well-formed designed conflict is clean and reaches the prompt. | Zero issues; the system prompt states the opposition. |
 | R-CONFLICT-5 | A stance survives the cast card wire format. | `castFromCard` round-trips `stance`. |
+| R-CONFLICT-6 | A yield consumed only by the stancer itself is not counted. | No later step consumes `Critique` → `unused_conflict_yield`. |
+| R-CONFLICT-7 | A stance must run after every target. | Two holders of the challenged capability; the challenger sits between them → warning. |
+| R-CONFLICT-8 | A stance whose target never runs is flagged. | The challenged actor has no protocol step → `stance_target_inactive`. |
 
 ## LLM adapter — `test/requirements/llm.requirements.test.ts`
 
@@ -153,6 +157,7 @@ The in-memory store is the default; the host may persist it so refusals and appr
 | R-STORE-1 | A refusal survives a new store instance. | `put` then a fresh store reads the same entry, reason intact. |
 | R-STORE-2 | A missing or corrupt file yields an empty store. | Absent file and `{ not json` both → zero entries. |
 | R-STORE-3 | A persisted audition is a cache hit for the next dressing. | Second dressing makes no call and is bound from the file. |
+| R-STORE-4 | A valid file with the wrong shape is filtered, never thrown on. | `[null, 42, {…}]` → only the well-formed entry survives. |
 
 ## Host casting call — `test/requirements/audition-prompt.requirements.test.ts`
 
@@ -166,6 +171,7 @@ A project tool cannot spawn a subagent, so the audition itself is an orchestrati
 | R-AUDITION-4 | A partial answer declines the roles it omits. | One role answered, another → decline. |
 | R-AUDITION-5 | Parsed answers drive dressing. | The accepted role binds; the omitted role is `uncast`. |
 | R-AUDITION-6 | A recorded casting call binds deterministically from a warm store. | Three real agent replies → all three candidates traced, Vimes bound, the others unused. |
+| R-AUDITION-7 | Text after the answer does not break parsing. | A second object, a trailing brace, and a `}` inside a string are all survived. |
 
 ## Selection among acceptors — `test/requirements/selection.requirements.test.ts`
 
@@ -178,6 +184,8 @@ Once several personas accept, how many are asked and who is chosen are two separ
 | R-SELECT-3 | A selector may leave the role uncast. | Hook returns `undefined` → no binding, role `uncast`, no `persona_selected`. |
 | R-SELECT-4 | Without `askAll`, auditioning stops once the role is filled. | Only the first persona is asked. |
 | R-SELECT-5 | A persona may accept more than one role. | One persona binds both roles of a two-role cast. |
+| R-SELECT-6 | The selection knobs are reachable through `StageManager`. | `askAll` + `select` on `StageOptions` → three asked, the hook's choice bound. |
+| R-SELECT-7 | A selector naming someone outside the candidates uncasts the role. | Hook returns an outsider → no binding, role `uncast`. |
 
 ## Property — `test/requirements/properties.requirements.test.ts`
 
@@ -213,6 +221,7 @@ Requirements are not just documentation — writing them surfaces bugs. So far:
 - **R-PERSONA-17 caught an incomplete fingerprint.** `roleFingerprint` omitted the slot name, so two differently named roles with identical content shared a cache entry and a cache hit was labelled with the wrong role. The name is now hashed and cached records are relabelled to the role they were applied to.
 - **R-OCAGENT-7/8 hardened the adapter.** A single leading *or* trailing quote was stripped (corrupting unquoted scalars), and frontmatter after leading blank lines or with uppercase keys was silently skipped.
 - **The live casting call surfaced a naming trap.** `dressCast` took `store` while `StageOptions` took `auditionStore`; passing the documented name silently used an empty store and re-auditioned (the example threw with a full cache). Both now use `auditionStore`. This is the kind of bug only an end-to-end run finds — the unit tests used the short name consistently and stayed green.
+- **Pre-merge review closed four robustness gaps.** The file store threw on a valid-JSON/wrong-shape file (now filters entries); the casting-call parser used a greedy `lastIndexOf("}")` and lost a valid answer followed by another object (now scans for the first balanced object); the selection knobs existed on `dressCast` but not through `StageManager` (now forwarded); and a `select` naming a non-candidate silently bound a different persona (now leaves the role uncast). Three smaller ones: out-of-batch answers are ignored, `unused_conflict_yield` no longer counts the stancer's own step, and a stance must run after *every* target with an inactive target flagged.
 
 ## Adding a requirement
 

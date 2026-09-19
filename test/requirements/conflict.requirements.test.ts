@@ -142,4 +142,56 @@ describe("Designed conflict requirements", () => {
     } as never);
     expect(parsed.actors[0]!.stance).toEqual({ opposes: "analysis", toYield: "Critique" });
   });
+
+  test("R-CONFLICT-6 a yield consumed only by the stancer itself is not counted", () => {
+    const writer = createActor({
+      name: "writer", role: "writer", objective: "write",
+      capabilities: ["analysis"], expectedOutput: ["Critique"],
+    });
+    const challenger = createActor({
+      name: "challenger", role: "challenger", objective: "challenge",
+      capabilities: ["adversarial_review"], expectedOutput: ["Verdict"],
+      stance: { opposes: "analysis", toYield: "Critique" },
+    });
+    const cast = createCast([writer, challenger], createProtocol([
+      { actor: "writer", instruction: "write", produces: ["Critique"] },
+      { actor: "challenger", instruction: "challenge", consumes: ["Critique"], produces: ["Verdict"] },
+    ]));
+    expect(
+      new CastingDirector().validate(scene(), cast).some((i) => i.code === "unused_conflict_yield"),
+    ).toBe(true);
+  });
+
+  test("R-CONFLICT-7 a stance must run after every target", () => {
+    const a1 = createActor({ name: "a1", role: "a1", objective: "x", capabilities: ["analysis"], expectedOutput: ["A"] });
+    const a2 = createActor({ name: "a2", role: "a2", objective: "y", capabilities: ["analysis"], expectedOutput: ["B"] });
+    const challenger = createActor({
+      name: "challenger", role: "challenger", objective: "challenge",
+      capabilities: ["adversarial_review"], expectedOutput: ["Critique"],
+      stance: { opposes: "analysis", toYield: "Critique" },
+    });
+    const cast = createCast([a1, a2, challenger], createProtocol([
+      { actor: "a1", instruction: "x", produces: ["A"] },
+      { actor: "challenger", instruction: "challenge", consumes: ["A"], produces: ["Critique"] },
+      { actor: "a2", instruction: "y", produces: ["B"] },
+    ]));
+    expect(
+      new CastingDirector().validate(scene(), cast).some((i) => i.code === "stance_before_target"),
+    ).toBe(true);
+  });
+
+  test("R-CONFLICT-8 a stance whose target never runs is flagged", () => {
+    const challenger = createActor({
+      name: "challenger", role: "challenger", objective: "challenge",
+      capabilities: ["adversarial_review"], expectedOutput: ["Critique"],
+      stance: { opposes: "analysis", toYield: "Critique" },
+    });
+    const ghost = createActor({ name: "ghost", role: "ghost", objective: "x", capabilities: ["analysis"], expectedOutput: ["A"] });
+    const cast = createCast([challenger, ghost], createProtocol([
+      { actor: "challenger", instruction: "challenge", produces: ["Critique"] },
+    ]));
+    expect(
+      new CastingDirector().validate(scene(), cast).some((i) => i.code === "stance_target_inactive"),
+    ).toBe(true);
+  });
 });

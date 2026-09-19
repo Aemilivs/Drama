@@ -70,6 +70,24 @@ describe("Persistent audition store requirements", () => {
     });
   });
 
+  test("R-STORE-4 a valid file with the wrong shape is filtered, never thrown on", async () => {
+    await withTempFile((file) => {
+      writeFileSync(
+        file,
+        JSON.stringify([
+          null,
+          42,
+          { persona: "ada" },
+          { persona: "ada", fingerprint: "fp", accepted: false, role: "reviewer" },
+        ]),
+      );
+      const store = createJsonFileAuditionStore(file);
+      expect(store.all()).toHaveLength(1);
+      expect(store.get("ada", "fp")?.accepted).toBe(false);
+      expect(store.get("ada", "missing")).toBeUndefined();
+    });
+  });
+
   test("R-STORE-3 a persisted audition is a cache hit for the next dressing", async () => {
     await withTempFile(async (file) => {
       let calls = 0;

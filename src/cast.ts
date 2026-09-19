@@ -49,7 +49,8 @@ export type CastIssueCode =
   | "duplicate_actor"
   | "dangling_stance"
   | "unused_conflict_yield"
-  | "stance_before_target";
+  | "stance_before_target"
+  | "stance_target_inactive";
 
 export interface CastIssue {
   severity: "error" | "warning";
@@ -590,26 +591,44 @@ export class CastingDirector {
         });
         continue;
       }
+      const ownIndex = stepIndexByActor.get(actor.name);
       const toYield = stance.toYield;
-      if (toYield && !cast.protocol.steps.some((step) => step.consumes.includes(toYield))) {
+      if (toYield) {
+        const consumedLater = cast.protocol.steps.some(
+          (step, index) => step.consumes.includes(toYield) && index > (ownIndex ?? -1),
+        );
+        if (!consumedLater) {
+          issues.push({
+            severity: "warning",
+            code: "unused_conflict_yield",
+            message: `Actor "${actor.name}" should yield "${toYield}", but no later step consumes it.`,
+            actors: [actor.name],
+          });
+        }
+      }
+
+      const inactive = targets.filter((target) => !stepIndexByActor.has(target.name));
+      if (inactive.length > 0) {
         issues.push({
           severity: "warning",
-          code: "unused_conflict_yield",
-          message: `Actor "${actor.name}" should yield "${toYield}", but no step consumes it.`,
-          actors: [actor.name],
+          code: "stance_target_inactive",
+          message: `Actor "${actor.name}" challenges ${inactive
+            .map((target) => `"${target.name}"`)
+            .join(", ")}, which never runs in the protocol.`,
+          actors: [actor.name, ...inactive.map((target) => target.name)],
         });
       }
-      const ownIndex = stepIndexByActor.get(actor.name);
+
       const targetIndices = targets
         .map((target) => stepIndexByActor.get(target.name))
         .filter((index): index is number => index !== undefined);
       if (ownIndex !== undefined && targetIndices.length > 0) {
-        const firstTarget = Math.min(...targetIndices);
-        if (ownIndex <= firstTarget) {
+        const lastTarget = Math.max(...targetIndices);
+        if (ownIndex <= lastTarget) {
           issues.push({
             severity: "warning",
             code: "stance_before_target",
-            message: `Actor "${actor.name}" challenges "${stance.opposes}" but runs before it produces anything to challenge.`,
+            message: `Actor "${actor.name}" challenges "${stance.opposes}" but runs before every target has produced.`,
             actors: [actor.name, ...targets.map((target) => target.name)],
           });
         }

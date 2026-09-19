@@ -37,7 +37,7 @@ A role may declare its **stance** — the role it exists to challenge, and what 
 stance: { opposes: "analysis", toYield: "Critique" }
 ```
 
-This is what *"their conflicts produce the intended result"* looks like as code. The casting director validates the design: the target must exist (`dangling_stance`), the challenger must run after its target has produced (`stance_before_target`), and the conflict must yield something a later step consumes (`unused_conflict_yield`). A stance is a property of a derived role, not a catalogue entry — it does not fix which roles exist.
+This is what *"their conflicts produce the intended result"* looks like as code. The casting director validates the design: the target must exist (`dangling_stance`), the challenger must run after its targets have produced (`stance_before_target`), every target must actually run (`stance_target_inactive`), and the conflict must yield something a later step consumes (`unused_conflict_yield`). A stance is a property of a derived role, not a catalogue entry — it does not fix which roles exist.
 
 ## Nothing is declared in advance
 
@@ -105,7 +105,7 @@ The reason is stored, and its nature matters:
 | Reason | Nature | Handling |
 | --- | --- | --- |
 | lacks a required tool | contextual, objective | respect for this fingerprint; a new role may be asked |
-| not now | temporary | TTL at the host; ask again later |
+| not now | temporary | the host owns a TTL; the core stores only the reason |
 | "this is not mine" | principled | respect locally for the fingerprint, never for the capability |
 | unstated | noise | cache only, no policy |
 
@@ -144,7 +144,7 @@ Auditions and cache hits are recorded, so a casting decision can always be expla
 
 ## Open question
 
-The model is implemented; what remains is host wiring and one design increment:
+The model is implemented end to end: personas, auditions, caching, designed conflict, a host casting call, and selection among acceptors. What remains is host wiring, not design:
 
-- A persistent `AuditionStore` and a subagent-spawning `Auditioner` in `.opencode/`.
-- First-class conflict design on roles (`stance`), so that "designed disagreement" is validated rather than implied.
+- Cross-process coordination of the file store (it is last-write-wins within a session; one instance per session owns the file).
+- A live `Auditioner` adapter that spawns the persona's subagent from the orchestrator — the spawn itself cannot live in a project tool.

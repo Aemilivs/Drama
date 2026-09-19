@@ -450,6 +450,33 @@ describe("Persona and audition requirements", () => {
     expect(second.uncast).toContain("researcher");
   });
 
+  test("R-PERSONA-18 an answer about a role the persona was not asked about is ignored", async () => {
+    const s = scene();
+    const base = roles();
+    const store = createMemoryAuditionStore();
+    const researcher = base.actors.find((actor) => actor.name === "researcher")!;
+    store.put("ada", roleFingerprint(roleRefOf(researcher)), {
+      role: "researcher",
+      persona: "ada",
+      accepted: true,
+      approach: "cached",
+    });
+
+    const stray: Auditioner = ({ roles: openRoles, persona }) => [
+      { role: "researcher", persona: persona.id, accepted: true, approach: "stray" },
+      ...openRoles.map((role) => ({ role: role.name, persona: persona.id, accepted: true })),
+    ];
+    const out = await dressCast(base, s, {
+      personas: [ada],
+      auditioner: stray,
+      auditionStore: store,
+    });
+
+    const researcherAuditions = out.auditions.filter((audition) => audition.role === "researcher");
+    expect(researcherAuditions).toHaveLength(1);
+    expect(researcherAuditions[0]!.cached).toBe(true);
+  });
+
   test("R-PERSONA-17 the fingerprint includes the slot name, and cache hits keep the right label", async () => {
     const base = createActor({
       name: "researcher",

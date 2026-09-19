@@ -215,6 +215,9 @@ export interface DressedCast {
  * Dress a cast: bind personas to the cast's roles by auditioning them.
  * Roles are never added or removed — only dressed. A role nobody accepts is
  * left as a bare actor.
+ *
+ * Auditions are written to the store as they arrive, so a `select` that throws
+ * still leaves the gathered answers cached.
  */
 export async function dressCast(
   cast: Cast,
@@ -280,9 +283,12 @@ export async function dressCast(
     }
 
     if (toAsk.length > 0) {
+      const askedNames = new Set(toAsk.map((role) => role.name));
       const answers = await options.auditioner({ roles: toAsk, persona, scene });
       asked += 1;
       for (const answer of answers) {
+        // Ignore answers about roles this persona was not asked about.
+        if (!askedNames.has(answer.role)) continue;
         const actor = cast.actors.find((candidate) => candidate.name === answer.role);
         if (!actor) continue;
         store.put(persona.id, roleFingerprint(roleRefOf(actor)), answer);
@@ -313,8 +319,10 @@ export async function dressCast(
       roleRefOf(actor),
     );
     if (!chosen) continue;
-    const match =
-      candidates.find((candidate) => candidate.persona.id === chosen.id) ?? candidates[0]!;
+    const match = candidates.find((candidate) => candidate.persona.id === chosen.id);
+    // A selector that names someone outside the candidate set leaves the role
+    // uncast rather than silently binding a different persona.
+    if (!match) continue;
     bindings.set(actor.name, {
       persona: match.persona,
       approach: match.audition.approach,

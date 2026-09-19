@@ -107,6 +107,17 @@ describe("Casting call requirements", () => {
     expect(uncast).toEqual(["analyst"]);
   });
 
+  test("R-AUDITION-7 text after the answer does not break parsing", () => {
+    const followed = '{"auditions":[{"role":"reviewer","accepted":true}]}\n{"auditions":[]}';
+    expect(parseAuditionAnswer(followed, "ada", ["reviewer"])[0]!.accepted).toBe(true);
+
+    const trailingBrace = '{"auditions":[{"role":"reviewer","accepted":true}]} hope that helps }';
+    expect(parseAuditionAnswer(trailingBrace, "ada", ["reviewer"])[0]!.accepted).toBe(true);
+
+    const braceInString = '{"auditions":[{"role":"reviewer","accepted":true,"approach":"has } brace"}]}';
+    expect(parseAuditionAnswer(braceInString, "ada", ["reviewer"])[0]!.approach).toBe("has } brace");
+  });
+
   test("R-AUDITION-6 a recorded casting call binds deterministically from a warm store", async () => {
     const { gathered, dressed, binding, candidates } = await runAuditionExample();
     expect(gathered).toHaveLength(3);

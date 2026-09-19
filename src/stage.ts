@@ -23,7 +23,7 @@ import type { Cast } from "./cast";
 import { CastingDirector } from "./cast";
 import type { ActorFailure, Evaluation } from "./evaluation";
 import { Evaluator } from "./evaluation";
-import type { AuditionEvent, Auditioner, AuditionStore, Persona } from "./persona";
+import type { AuditionEvent, Auditioner, AuditionStore, Persona, Selector } from "./persona";
 import { dressCast } from "./persona";
 
 export type StageEvent =
@@ -90,6 +90,10 @@ export interface StageOptions {
   auditionStore?: AuditionStore;
   /** Cap on how many personas are asked per dressing. */
   maxAuditions?: number;
+  /** Ask every persona instead of stopping once every role has an acceptor. */
+  askAll?: boolean;
+  /** Choose among the personas that accepted. Defaults to roster order. */
+  select?: Selector;
   onEvent?: (event: StageEvent) => void;
 }
 
@@ -140,6 +144,8 @@ export class StageManager {
       auditioner: options.auditioner,
       auditionStore: options.auditionStore,
       maxAuditions: options.maxAuditions,
+      askAll: options.askAll,
+      select: options.select,
       onEvent: options.onEvent,
     };
   }
@@ -201,6 +207,8 @@ export class StageManager {
         auditioner: opts.auditioner,
         auditionStore: opts.auditionStore,
         maxAuditions: opts.maxAuditions,
+        askAll: opts.askAll,
+        select: opts.select,
         onEvent: emit,
       });
       return dressed.cast;
