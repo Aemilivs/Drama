@@ -136,6 +136,7 @@ A role may declare the one it challenges and what the disagreement should yield 
 | R-CONFLICT-6 | A yield consumed only by the stancer itself is not counted. | No later step consumes `Critique` → `unused_conflict_yield`. |
 | R-CONFLICT-7 | A stance must run after every target. | Two holders of the challenged capability; the challenger sits between them → warning. |
 | R-CONFLICT-8 | A stance whose target never runs is flagged. | The challenged actor has no protocol step → `stance_target_inactive`. |
+| R-CONFLICT-9 | A later step by the stancer is not a consumer of its own yield. | A second step by the challenger consuming `Critique` still warns. |
 
 ## LLM adapter — `test/requirements/llm.requirements.test.ts`
 
@@ -196,9 +197,12 @@ A `Performance` is pure data and round-trips exactly, except for `Actor.executor
 | R-SERIAL-1 | A performance round-trips through JSON. | Reloaded equals the JSON projection of the original. |
 | R-SERIAL-2 | Executors are dropped on write and re-attached on read. | No `"executor"` in the text; a registry re-binds by actor name. |
 | R-SERIAL-3 | Persona bindings survive the round-trip. | A dressed actor still reports `Ada` after reload. |
-| R-SERIAL-4 | A foreign or broken document is rejected clearly. | Non-JSON, wrong `format`, missing `formatVersion`, missing payload. |
+| R-SERIAL-4 | A foreign or broken document is rejected clearly. | Non-JSON, wrong `format`, missing `formatVersion`, missing or broken payload, a newer version. |
 | R-SERIAL-5 | A reloaded trace renders identically. | `formatPerformance(reloaded) === formatPerformance(original)`. |
 | R-SERIAL-6 | A stored trace can be replayed with re-supplied machinery. | Reload, re-attach executor + evaluator, re-perform → same fingerprint. |
+| R-SERIAL-7 | Executors are read by own property only. | An actor named `constructor` gets no executor unless the registry supplies one. |
+| R-SERIAL-8 | A broken payload or a newer version is rejected clearly. | `{}` payload → "missing"; `formatVersion: 999` → "newer than supported". |
+| R-SERIAL-9 | An already-parsed document cannot smuggle a function. | A hand-set `executor` on the payload is dropped. |
 
 ## Parallel steps — `test/requirements/parallel.requirements.test.ts`
 
@@ -209,10 +213,11 @@ Opt-in (`parallel: true`). Independent consecutive steps run in waves; a wave sh
 | R-PARALLEL-1 | Without the flag, execution stays sequential. | `maxInFlight` 1; history lengths 0, 1, 2. |
 | R-PARALLEL-2 | Independent consecutive steps run concurrently. | Two `consumes: []` steps overlap; `maxInFlight` 2. |
 | R-PARALLEL-3 | A dependent step never overlaps its producers. | The consumer of `A,B` starts only after both finish. |
-| R-PARALLEL-4 | Turns, artifacts and events stay in declaration order. | `["first","second","third"]` despite concurrency. |
+| R-PARALLEL-4 | Turns and artifacts stay in declaration order. | `["first","second","third"]` despite concurrency; activations precede outputs within a wave. |
 | R-PARALLEL-5 | A wave shares one history snapshot. | Peers see history 0; the dependent step sees 2. |
 | R-PARALLEL-6 | A required failure halts later waves; an optional one does not. | Required → consumer never runs; optional → it does. |
 | R-PARALLEL-7 | A parallel run is as reproducible as a sequential one. | Two runs give the same turns and artifact kinds. |
+| R-PARALLEL-8 | An actor named like a prototype member runs its own executor. | A `constructor` actor succeeds instead of hitting `Object.prototype`. |
 
 ## Property — `test/requirements/properties.requirements.test.ts`
 
@@ -249,6 +254,7 @@ Requirements are not just documentation — writing them surfaces bugs. So far:
 - **R-OCAGENT-7/8 hardened the adapter.** A single leading *or* trailing quote was stripped (corrupting unquoted scalars), and frontmatter after leading blank lines or with uppercase keys was silently skipped.
 - **The live casting call surfaced a naming trap.** `dressCast` took `store` while `StageOptions` took `auditionStore`; passing the documented name silently used an empty store and re-auditioned (the example threw with a full cache). Both now use `auditionStore`. This is the kind of bug only an end-to-end run finds — the unit tests used the short name consistently and stayed green.
 - **Pre-merge review closed four robustness gaps.** The file store threw on a valid-JSON/wrong-shape file (now filters entries); the casting-call parser used a greedy `lastIndexOf("}")` and lost a valid answer followed by another object (now scans for the first balanced object); the selection knobs existed on `dressCast` but not through `StageManager` (now forwarded); and a `select` naming a non-candidate silently bound a different persona (now leaves the role uncast). Three smaller ones: out-of-batch answers are ignored, `unused_conflict_yield` no longer counts the stancer's own step, and a stance must run after *every* target with an inactive target flagged.
+- **The second review found three more.** Executor registries were read through the prototype chain, so an actor named `constructor` crashed the stage and one named `valueOf` silently ran the wrong function — lookups are now own-property only (R-PARALLEL-8, R-SERIAL-7). `unused_conflict_yield` still counted a *later* step by the stancer (R-CONFLICT-9). And the serialiser accepted a structurally broken payload and a future `formatVersion`, failing with a raw `TypeError` — it now validates the payload shape, rejects newer versions, and drops any executor smuggled into an already-parsed document (R-SERIAL-8/9).
 
 ## Adding a requirement
 

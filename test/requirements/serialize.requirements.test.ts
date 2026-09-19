@@ -13,6 +13,7 @@ import {
   formatPerformance,
   functionActor,
   ok,
+  performanceFromDocument,
   sceneFromCard,
   serializePerformance,
 } from "../../src/index.ts";
@@ -120,5 +121,53 @@ describe("Performance serialisation requirements", () => {
       reloaded.cast,
     );
     expect(normalizePerformance(replay)).toEqual(normalizePerformance(first));
+  });
+
+  test("R-SERIAL-7 executors are read by own property, so prototype names stay empty", async () => {
+    const { s, cast } = scenario();
+    const original = await new StageManager({ evaluator: evaluatorFor(s) }).perform(s, cast);
+    const doc = JSON.parse(serializePerformance(original)) as {
+      performance: {
+        cast: { actors: { name: string }[] };
+        casts: { actors: { name: string }[] }[];
+      };
+    };
+    doc.performance.cast.actors[0]!.name = "constructor";
+    doc.performance.casts[0]!.actors[0]!.name = "constructor";
+
+    const reloaded = deserializePerformance(JSON.stringify(doc));
+    expect((reloaded.cast.actors[0] as { executor?: unknown }).executor).toBeUndefined();
+
+    const fn = () => ok([artifact("constructor", "Report", "x")]);
+    const withFn = deserializePerformance(JSON.stringify(doc), {
+      executors: { constructor: fn },
+    });
+    expect((withFn.cast.actors[0] as { executor?: unknown }).executor).toBe(fn);
+  });
+
+  test("R-SERIAL-8 a broken payload or a newer version is rejected clearly", () => {
+    const base = { format: "drama.performance", formatVersion: 1 };
+    expect(() => deserializePerformance(JSON.stringify({ ...base, performance: {} }))).toThrow(
+      "missing",
+    );
+    expect(() =>
+      deserializePerformance(JSON.stringify({ ...base, performance: { cast: { actors: [] } } })),
+    ).toThrow("missing");
+    expect(() =>
+      deserializePerformance(
+        JSON.stringify({ format: "drama.performance", formatVersion: 999, performance: {} }),
+      ),
+    ).toThrow("newer than supported");
+  });
+
+  test("R-SERIAL-9 an already-parsed document cannot smuggle a function", async () => {
+    const { s, cast } = scenario();
+    const original = await new StageManager({ evaluator: evaluatorFor(s) }).perform(s, cast);
+    const doc = JSON.parse(serializePerformance(original)) as {
+      performance: { cast: { actors: Record<string, unknown>[] } };
+    };
+    doc.performance.cast.actors[0]!.executor = () => "pwned";
+    const reloaded = performanceFromDocument(doc);
+    expect((reloaded.cast.actors[0] as { executor?: unknown }).executor).toBeUndefined();
   });
 });

@@ -190,4 +190,38 @@ describe("Parallel step requirements", () => {
     );
     expect(a.artifacts.map((item) => item.kind)).toEqual(b.artifacts.map((item) => item.kind));
   });
+
+  test("R-PARALLEL-8 an actor named like a prototype member runs its own executor", async () => {
+    const s = sceneFromCard({
+      objective: "produce",
+      success_criteria: ["X exists"],
+      required_capabilities: ["x"],
+    });
+    const weird = functionActor({
+      name: "constructor",
+      role: "constructor",
+      objective: "x",
+      capabilities: ["x"],
+      produces: "X",
+      run: () => ok([artifact("constructor", "X", "v")]),
+    });
+    const cast = createCast(
+      [weird],
+      createProtocol([{ actor: "constructor", instruction: "x", produces: ["X"] }]),
+    );
+    const evaluator = new Evaluator(
+      criterionEvaluator([
+        {
+          criterion: s.successCriteria[0]!,
+          check: (ctx) =>
+            ctx.artifacts.some((item) => item.kind === "X")
+              ? { status: "pass" as const, evidence: "ok" }
+              : { status: "fail" as const, evidence: "no" },
+        },
+      ]),
+    );
+    const performance = await new StageManager({ evaluator }).perform(s, cast);
+    expect(performance.finalResult.status).toBe("done");
+    expect(performance.turns[0]!.output.status).toBe("ok");
+  });
 });

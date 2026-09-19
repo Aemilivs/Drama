@@ -7,7 +7,7 @@
  */
 
 import type { Artifact, Diagnosis, RecommendedAction, Status } from "./types";
-import { nextId } from "./types";
+import { nextId, ownEntry } from "./types";
 import type { Scene, SceneAnalysis, SceneDesignInput } from "./scene";
 import { SceneDesigner } from "./scene";
 import type {
@@ -508,7 +508,7 @@ export class StageManager {
   }
 
   private resolveExecutor(actor: Actor, opts: StageOptions): ActorExecutor {
-    const override = opts.executors?.[actor.name];
+    const override = ownEntry(opts.executors, actor.name);
     if (override) return override;
     if (actor.executor) return actor.executor;
     // Only LLM actors may fall back to the shared chat function.

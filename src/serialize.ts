@@ -12,9 +12,10 @@
  * that machinery — which is what makes a replay honest rather than magical.
  */
 
-import type { ActorExecutor } from "./actor";
+import type { Actor, ActorExecutor } from "./actor";
 import type { Cast } from "./cast";
 import type { Performance } from "./stage";
+import { ownEntry } from "./types";
 
 export const PERFORMANCE_FORMAT = "drama.performance";
 export const PERFORMANCE_FORMAT_VERSION = 1;
@@ -63,13 +64,50 @@ export function performanceFromDocument(
   if (typeof value.formatVersion !== "number") {
     throw new Error("performance document has no formatVersion");
   }
+  if (value.formatVersion > PERFORMANCE_FORMAT_VERSION) {
+    throw new Error(
+      `performance document version ${value.formatVersion} is newer than supported (${PERFORMANCE_FORMAT_VERSION})`,
+    );
+  }
   if (!isRecord(value.performance)) {
     throw new Error("performance document has no performance payload");
   }
+  assertPayload(value.performance);
   return reattachExecutors(
     value.performance as unknown as Performance,
     options.executors ?? {},
   );
+}
+
+const REQUIRED_PAYLOAD_FIELDS = [
+  "scene",
+  "cast",
+  "casts",
+  "iterations",
+  "turns",
+  "artifacts",
+  "events",
+  "finalResult",
+] as const;
+
+/** Reject a structurally broken payload with a clear message. */
+function assertPayload(payload: Record<string, unknown>): void {
+  const missing = REQUIRED_PAYLOAD_FIELDS.filter((field) => !(field in payload));
+  if (missing.length > 0) {
+    throw new Error(`performance payload is missing: ${missing.join(", ")}`);
+  }
+  for (const field of ["casts", "iterations", "turns", "artifacts", "events"] as const) {
+    if (!Array.isArray(payload[field])) {
+      throw new Error(`performance payload field "${field}" is not an array`);
+    }
+  }
+  const cast = payload.cast;
+  if (!isRecord(cast) || !Array.isArray(cast.actors)) {
+    throw new Error("performance payload has no usable cast");
+  }
+  if (!isRecord(payload.scene) || !isRecord(payload.finalResult)) {
+    throw new Error("performance payload has no usable scene or finalResult");
+  }
 }
 
 /** Reload a performance from its JSON text. Throws on invalid JSON. */
@@ -94,13 +132,16 @@ function reattachExecutors(
   const restore = (cast: Cast): Cast => ({
     ...cast,
     actors: cast.actors.map((actor) => {
-      const executor = executors[actor.name];
-      return executor ? { ...actor, executor } : { ...actor };
+      // Always drop any incoming executor: a registry entry is the only source.
+      const bare = { ...actor } as Actor & { executor?: ActorExecutor };
+      delete bare.executor;
+      const executor = ownEntry(executors, actor.name);
+      return executor ? { ...bare, executor } : bare;
     }),
   });
   return {
     ...performance,
     cast: restore(performance.cast),
-    casts: Array.isArray(performance.casts) ? performance.casts.map(restore) : [],
+    casts: performance.casts.map(restore),
   };
 }

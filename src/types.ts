@@ -95,6 +95,18 @@ export function toInfoItems(items: unknown): InfoItem[] {
 let idCounter = 0;
 
 /** Process-local monotonic ids. Injection-friendly enough for tests and traces. */
+/**
+ * Read only an *own* property. Registries are keyed by actor name, and a name
+ * like `constructor` or `valueOf` would otherwise reach `Object.prototype`.
+ */
+export function ownEntry<T>(
+  record: Record<string, T> | undefined,
+  key: string,
+): T | undefined {
+  if (!record) return undefined;
+  return Object.prototype.hasOwnProperty.call(record, key) ? record[key] : undefined;
+}
+
 export function nextId(prefix: string): string {
   idCounter += 1;
   return `${prefix}-${idCounter}`;

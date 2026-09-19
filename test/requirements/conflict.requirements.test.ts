@@ -194,4 +194,24 @@ describe("Designed conflict requirements", () => {
       new CastingDirector().validate(scene(), cast).some((i) => i.code === "stance_target_inactive"),
     ).toBe(true);
   });
+
+  test("R-CONFLICT-9 a later step by the stancer does not count as a consumer", () => {
+    const writer = createActor({
+      name: "writer", role: "writer", objective: "w",
+      capabilities: ["analysis"], expectedOutput: ["Draft"],
+    });
+    const challenger = createActor({
+      name: "challenger", role: "challenger", objective: "c",
+      capabilities: ["adversarial_review"], expectedOutput: ["Verdict"],
+      stance: { opposes: "analysis", toYield: "Critique" },
+    });
+    const cast = createCast([writer, challenger], createProtocol([
+      { actor: "writer", instruction: "w", produces: ["Draft"] },
+      { actor: "challenger", instruction: "c", consumes: ["Draft"], produces: ["Critique"] },
+      { actor: "challenger", instruction: "c2", consumes: ["Critique"], produces: ["Verdict"] },
+    ]));
+    expect(
+      new CastingDirector().validate(scene(), cast).some((i) => i.code === "unused_conflict_yield"),
+    ).toBe(true);
+  });
 });

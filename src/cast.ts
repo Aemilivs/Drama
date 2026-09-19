@@ -595,7 +595,11 @@ export class CastingDirector {
       const toYield = stance.toYield;
       if (toYield) {
         const consumedLater = cast.protocol.steps.some(
-          (step, index) => step.consumes.includes(toYield) && index > (ownIndex ?? -1),
+          (step, index) =>
+            step.consumes.includes(toYield) &&
+            // The stancer's own steps never count as consumers, now or later.
+            step.actor !== actor.name &&
+            index > (ownIndex ?? -1),
         );
         if (!consumedLater) {
           issues.push({
