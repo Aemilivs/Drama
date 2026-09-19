@@ -23,6 +23,8 @@ import type { Cast } from "./cast";
 import { CastingDirector } from "./cast";
 import type { ActorFailure, Evaluation } from "./evaluation";
 import { Evaluator } from "./evaluation";
+import type { AuditionEvent, Auditioner, AuditionStore, Persona } from "./persona";
+import { dressCast } from "./persona";
 
 export type StageEvent =
   | { type: "scene_designed"; sceneId: string; complete: boolean; questions: string[] }
@@ -34,7 +36,8 @@ export type StageEvent =
   | { type: "decision"; iteration: number; action: RecommendedAction; diagnosis: Diagnosis }
   | { type: "recast"; attempt: number; diagnosis: Diagnosis; actors: string[] }
   | { type: "redesign"; attempt: number; diagnosis: Diagnosis; sceneId: string }
-  | { type: "finished"; status: "done" | "failed"; reason: string };
+  | { type: "finished"; status: "done" | "failed"; reason: string }
+  | AuditionEvent;
 
 export interface IterationRecord {
   index: number;
@@ -81,6 +84,12 @@ export interface StageOptions {
   tools?: ToolRegistry;
   /** Enables actors of kind "llm" that have no executor of their own. */
   chat?: ChatFn;
+  /** Roster of personas. With an `auditioner`, each cast is dressed. */
+  personas?: Persona[];
+  auditioner?: Auditioner;
+  auditionStore?: AuditionStore;
+  /** Cap on how many personas are asked per dressing. */
+  maxAuditions?: number;
   onEvent?: (event: StageEvent) => void;
 }
 
@@ -99,8 +108,9 @@ function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+/** Artifact inputs are explicit: an empty `consumes` means no inputs. */
 function selectInputs(artifacts: Artifact[], consumes: string[]): Artifact[] {
-  if (consumes.length === 0) return artifacts.slice();
+  if (consumes.length === 0) return [];
   return artifacts.filter((item) => consumes.includes(item.kind));
 }
 
@@ -126,6 +136,10 @@ export class StageManager {
       executors: options.executors ?? {},
       tools: options.tools ?? createToolRegistry(),
       chat: options.chat,
+      personas: options.personas,
+      auditioner: options.auditioner,
+      auditionStore: options.auditionStore,
+      maxAuditions: options.maxAuditions,
       onEvent: options.onEvent,
     };
   }
@@ -164,7 +178,7 @@ export class StageManager {
     let scene = sceneInput;
     let cast = castInput;
 
-    const casts: Cast[] = [cast];
+    const casts: Cast[] = [];
     const scenes: Scene[] = [scene];
     const iterations: IterationRecord[] = [];
     const turns: ActorTurn[] = [];
@@ -174,6 +188,22 @@ export class StageManager {
     const emit = (event: StageEvent) => {
       events.push(event);
       opts.onEvent?.(event);
+    };
+
+    /**
+     * Bind personas to a cast's roles when a roster and an auditioner are
+     * supplied. Roles are never added or removed — only dressed.
+     */
+    const dress = async (input: Cast): Promise<Cast> => {
+      if (!opts.personas?.length || !opts.auditioner) return input;
+      const dressed = await dressCast(input, scene, {
+        personas: opts.personas,
+        auditioner: opts.auditioner,
+        store: opts.auditionStore,
+        maxAuditions: opts.maxAuditions,
+        onEvent: emit,
+      });
+      return dressed.cast;
     };
 
     let result: PerformanceResult = {
@@ -194,6 +224,8 @@ export class StageManager {
       actors: cast.actors.map((actor) => actor.name),
       rationale: cast.rationale,
     });
+    cast = await dress(cast);
+    casts.push(cast);
 
     while (performances < this.maxPerformances) {
       performances += 1;
@@ -240,7 +272,7 @@ export class StageManager {
             actor,
             instruction: step.instruction,
             inputs,
-            history: turns,
+            history: turns.slice(),
             tools: opts.tools ?? createToolRegistry(),
             iteration: iterationIndex,
           });
@@ -340,20 +372,21 @@ export class StageManager {
           break;
         }
         castAttempt += 1;
-        cast = await this.castingDirector.cast(scene, {
+        const recastCast = await this.castingDirector.cast(scene, {
           attempt: castAttempt,
           previous: cast,
           evaluation,
           diagnosis: evaluation.diagnosis,
         });
-        casts.push(cast);
         recasts += 1;
         emit({
           type: "recast",
           attempt: castAttempt,
           diagnosis: evaluation.diagnosis,
-          actors: cast.actors.map((actor) => actor.name),
+          actors: recastCast.actors.map((actor) => actor.name),
         });
+        cast = await dress(recastCast);
+        casts.push(cast);
         continue;
       }
 
@@ -371,19 +404,20 @@ export class StageManager {
       artifacts.length = 0;
       // A redesigned scene restarts casting from attempt 1.
       castAttempt = 1;
-      cast = await this.castingDirector.cast(scene, {
+      const redesignedCast = await this.castingDirector.cast(scene, {
         attempt: castAttempt,
         previous: cast,
         evaluation,
         diagnosis: evaluation.diagnosis,
       });
-      casts.push(cast);
       emit({
         type: "redesign",
         attempt: redesigns,
         diagnosis: evaluation.diagnosis,
         sceneId: scene.id,
       });
+      cast = await dress(redesignedCast);
+      casts.push(cast);
     }
 
     if (result.status === "failed" && result.reason === "no iterations executed") {

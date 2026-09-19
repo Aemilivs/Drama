@@ -46,15 +46,50 @@ export interface Artifact<T = unknown> {
 export type InfoItem = string | { text: string; blocking?: boolean };
 
 export function infoText(item: InfoItem): string {
-  return typeof item === "string" ? item : item.text;
+  if (typeof item === "string") return item;
+  if (
+    item !== null &&
+    typeof item === "object" &&
+    typeof (item as { text?: unknown }).text === "string"
+  ) {
+    return (item as { text: string }).text;
+  }
+  return String(item ?? "");
 }
 
 export function isBlocking(item: InfoItem): boolean {
-  return typeof item !== "string" && item.blocking === true;
+  return (
+    item !== null &&
+    typeof item === "object" &&
+    (item as { blocking?: unknown }).blocking === true
+  );
 }
 
-export function toInfoItems(items: InfoItem[] | undefined): InfoItem[] {
-  return (items ?? []).slice();
+/**
+ * Normalise an information list from the wire. Malformed entries (nulls, bare
+ * objects without text) are dropped rather than propagated: the list comes from
+ * a model, and downstream analysis must never throw on it.
+ */
+export function toInfoItems(items: unknown): InfoItem[] {
+  if (!Array.isArray(items)) return [];
+  const out: InfoItem[] = [];
+  for (const item of items) {
+    if (typeof item === "string") {
+      out.push(item);
+      continue;
+    }
+    if (
+      item !== null &&
+      typeof item === "object" &&
+      typeof (item as { text?: unknown }).text === "string"
+    ) {
+      out.push({
+        text: (item as { text: string }).text,
+        blocking: (item as { blocking?: unknown }).blocking === true,
+      });
+    }
+  }
+  return out;
 }
 
 let idCounter = 0;

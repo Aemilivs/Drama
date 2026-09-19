@@ -36,6 +36,7 @@ export {
 export type {
   Actor,
   ActorKind,
+  ActorBinding,
   ActorContext,
   ActorExecutor,
   ActorOutput,
@@ -113,3 +114,32 @@ export type {
 export { StageManager } from "./stage";
 
 export { formatPerformance, performanceTimeline } from "./trace";
+
+export type {
+  Persona,
+  PersonaSource,
+  RoleRef,
+  Audition,
+  AuditionRecord,
+  Auditioner,
+  StoredAudition,
+  AuditionStore,
+  AuditionEvent,
+  DressOptions,
+  DressedCast,
+} from "./persona";
+export {
+  createPersona,
+  roleRefOf,
+  roleFingerprint,
+  acceptAllAuditioner,
+  createMemoryAuditionStore,
+  dressCast,
+} from "./persona";
+
+export type { OpencodeAgentCard, PersonaFromAgentOptions } from "./opencode";
+export {
+  parseOpencodeAgent,
+  personaFromOpencodeAgent,
+  personasFromOpencodeAgents,
+} from "./opencode";

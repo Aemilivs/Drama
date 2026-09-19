@@ -44,7 +44,7 @@ protocol:
   steps:
     - actor: <name>
       instruction: <what this activation should produce>
-      consumes: [<ArtifactKind>]     # omit/empty = all artifacts so far
+      consumes: [<ArtifactKind>]     # explicit inputs; empty = no artifact inputs
       produces: [<ArtifactKind>]
       optional: false
 

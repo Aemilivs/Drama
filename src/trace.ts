@@ -3,6 +3,12 @@
  */
 
 import type { Performance } from "./stage";
+import type { Actor } from "./actor";
+
+/** Show the persona a role is dressed in, when it has one. */
+function labelActor(actor: Actor): string {
+  return actor.binding ? `${actor.name} as ${actor.binding.persona.name}` : actor.name;
+}
 
 export function formatPerformance(performance: Performance): string {
   const lines: string[] = [];
@@ -10,7 +16,7 @@ export function formatPerformance(performance: Performance): string {
   lines.push(`Scene ${performance.scene.id}: ${performance.scene.objective}`);
   lines.push(
     `Cast ${performance.cast.id}: [${performance.cast.actors
-      .map((actor) => actor.name)
+      .map(labelActor)
       .join(", ")}]`,
   );
   if (performance.cast.rationale) lines.push(`  rationale: ${performance.cast.rationale}`);

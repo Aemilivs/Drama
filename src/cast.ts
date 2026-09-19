@@ -13,11 +13,14 @@ import type { Scene } from "./scene";
 import { type Actor, type ActorKind, createActor } from "./actor";
 import type { Evaluation } from "./evaluation";
 
+/**
+ * The protocol step's artifact inputs are explicit: `consumes: []` means the
+ * actor receives no input artifacts. List the kinds it needs, or compute them.
+ */
 export interface ProtocolStep {
   id: string;
   actor: string;
   instruction: string;
-  /** Artifact kinds required as input. Empty means "all artifacts produced so far". */
   consumes: string[];
   produces: string[];
   optional: boolean;
@@ -67,7 +70,6 @@ export interface RecastContext {
   evaluation?: Evaluation;
   diagnosis?: Diagnosis;
 }
-
 export type CastFn = (scene: Scene, ctx: RecastContext) => Cast | Promise<Cast>;
 
 export interface ProtocolStepInput {
@@ -80,20 +82,33 @@ export interface ProtocolStepInput {
 
 export function createProtocol(steps: ProtocolStepInput[], notes = ""): Protocol {
   return {
-    steps: steps.map((step, index) => ({
-      id: `step-${index + 1}`,
-      actor: step.actor,
-      instruction: step.instruction,
-      consumes: step.consumes?.slice() ?? [],
-      produces: step.produces?.slice() ?? [],
-      optional: step.optional ?? false,
-    })),
-    notes,
+    steps: (Array.isArray(steps) ? steps : []).map((raw, index) => {
+      const step = (raw ?? {}) as ProtocolStepInput;
+      return {
+        id: `step-${index + 1}`,
+        actor: typeof step.actor === "string" ? step.actor : "",
+        instruction: typeof step.instruction === "string" ? step.instruction : "",
+        consumes: readStrings(step.consumes),
+        produces: readStrings(step.produces),
+        optional: step.optional === true,
+      };
+    }),
+    notes: typeof notes === "string" ? notes : "",
   };
 }
 
 export function createCast(actors: Actor[], protocol: Protocol, rationale = ""): Cast {
   return { id: nextId("cast"), actors, protocol, rationale, createdAt: Date.now() };
+}
+
+function readStrings(value: unknown): string[] {
+  if (Array.isArray(value)) return value.map((item) => String(item));
+  if (typeof value === "string" && value.length > 0) return [value];
+  return [];
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function slug(text: string): string {
@@ -125,15 +140,20 @@ export function deriveMinimalCast(scene: Scene): Cast {
     ? [...new Set(scene.requiredCapabilities)]
     : ["reasoning"];
 
-  const actors: Actor[] = capabilities.map((capability) =>
-    createActor({
-      name: slug(capability),
-      role: capability,
+  const takenNames = new Set<string>();
+  const takenRoles = new Set<string>();
+  const actors: Actor[] = capabilities.map((capability) => {
+    const actor = createActor({
+      name: uniqueName(takenNames, slug(capability)),
+      role: uniqueName(takenRoles, capability),
       objective: `Produce the best possible result for the capability: ${capability}.`,
       capabilities: [capability],
       expectedOutput: [`${pascal(capability)}Report`],
-    }),
-  );
+    });
+    takenNames.add(actor.name);
+    takenRoles.add(actor.role);
+    return actor;
+  });
 
   const steps: ProtocolStepInput[] = actors.map((actor) => ({
     actor: actor.name,
@@ -145,8 +165,8 @@ export function deriveMinimalCast(scene: Scene): Cast {
   if (actors.length > 1) {
     const producerKinds = actors.flatMap((actor) => actor.expectedOutput);
     const synthesizer = createActor({
-      name: "synthesizer",
-      role: "synthesizer",
+      name: uniqueName(takenNames, "synthesizer"),
+      role: uniqueName(takenRoles, "synthesizer"),
       objective: "Merge every produced artifact into a single coherent answer.",
       capabilities: ["synthesis"],
       expectedOutput: ["FinalAnswer"],
@@ -154,7 +174,7 @@ export function deriveMinimalCast(scene: Scene): Cast {
     });
     actors.push(synthesizer);
     steps.push({
-      actor: "synthesizer",
+      actor: synthesizer.name,
       instruction: synthesizer.objective,
       consumes: producerKinds,
       produces: ["FinalAnswer"],
@@ -198,25 +218,27 @@ export interface CastCard {
   rationale?: string;
 }
 
-function asArray(value: string[] | string | undefined): string[] {
-  if (!value) return [];
-  return Array.isArray(value) ? value.slice() : [value];
-}
-
 export function actorFromCard(card: ActorCard): Actor {
+  const source = (card ?? {}) as ActorCard;
+  const name =
+    typeof source.name === "string" && source.name.length > 0 ? source.name : "actor";
+  const kind =
+    source.kind === "llm" || source.kind === "deterministic" || source.kind === "tool"
+      ? source.kind
+      : undefined;
   return createActor({
-    name: card.name,
-    role: card.role ?? card.name,
-    objective: card.objective ?? "",
-    kind: card.kind,
-    archetype: card.archetype,
-    capabilities: card.capabilities,
-    tools: card.tools,
-    knowledge: card.knowledge,
-    constraints: card.constraints,
-    interactionPermissions: card.interactionPermissions,
-    expectedOutput: asArray(card.expectedOutput ?? card.produces),
-    exitCondition: card.exitCondition,
+    name,
+    role: typeof source.role === "string" && source.role.length > 0 ? source.role : name,
+    objective: typeof source.objective === "string" ? source.objective : "",
+    kind,
+    archetype: typeof source.archetype === "string" ? source.archetype : undefined,
+    capabilities: readStrings(source.capabilities),
+    tools: readStrings(source.tools),
+    knowledge: readStrings(source.knowledge),
+    constraints: readStrings(source.constraints),
+    interactionPermissions: readStrings(source.interactionPermissions),
+    expectedOutput: readStrings(source.expectedOutput ?? source.produces),
+    exitCondition: typeof source.exitCondition === "string" ? source.exitCondition : undefined,
   });
 }
 
@@ -225,11 +247,26 @@ export function castFromCard(
   card: CastCard,
   options: { clock?: () => number } = {},
 ): Cast {
-  const actors = (card.cast ?? card.actors ?? []).map(actorFromCard);
-  const protocolCard = card.protocol;
-  const steps = Array.isArray(protocolCard) ? protocolCard : (protocolCard?.steps ?? []);
-  const notes = Array.isArray(protocolCard) ? "" : (protocolCard?.notes ?? "");
-  const cast = createCast(actors, createProtocol(steps, notes), card.rationale ?? "");
+  const source = (card ?? {}) as CastCard;
+  const actorCards: ActorCard[] = Array.isArray(source.cast)
+    ? source.cast
+    : Array.isArray(source.actors)
+      ? source.actors
+      : [];
+  const actors = actorCards.map((entry) => actorFromCard(entry));
+
+  const protocolCard = source.protocol;
+  let steps: ProtocolStepInput[] = [];
+  let notes = "";
+  if (Array.isArray(protocolCard)) {
+    steps = protocolCard;
+  } else if (isRecord(protocolCard)) {
+    if (Array.isArray(protocolCard.steps)) steps = protocolCard.steps as ProtocolStepInput[];
+    if (typeof protocolCard.notes === "string") notes = protocolCard.notes;
+  }
+
+  const rationale = typeof source.rationale === "string" ? source.rationale : "";
+  const cast = createCast(actors, createProtocol(steps, notes), rationale);
   return options.clock ? { ...cast, createdAt: options.clock() } : cast;
 }
 
@@ -238,6 +275,147 @@ export function castFromCard(
  * capabilities cover every required capability. Used so that mutually
  * redundant actors flag only one of themselves rather than all of them.
  */
+function cloneActor(actor: Actor): Actor {
+  return {
+    ...actor,
+    capabilities: actor.capabilities.slice(),
+    tools: actor.tools.slice(),
+    knowledge: actor.knowledge.slice(),
+    constraints: actor.constraints.slice(),
+    interactionPermissions: actor.interactionPermissions.slice(),
+    expectedOutput: actor.expectedOutput.slice(),
+  };
+}
+
+function cloneCast(cast: Cast): Cast {
+  return {
+    ...cast,
+    actors: cast.actors.map(cloneActor),
+    protocol: {
+      ...cast.protocol,
+      steps: cast.protocol.steps.map((step) => ({
+        ...step,
+        consumes: step.consumes.slice(),
+        produces: step.produces.slice(),
+      })),
+    },
+  };
+}
+
+function uniqueName(taken: Set<string>, base: string): string {
+  if (!taken.has(base)) return base;
+  let index = 2;
+  while (taken.has(`${base}-${index}`)) index += 1;
+  return `${base}-${index}`;
+}
+
+function capabilityActor(
+  capability: string,
+  takenNames: Set<string>,
+  takenRoles: Set<string>,
+): Actor {
+  return createActor({
+    name: uniqueName(takenNames, slug(capability)),
+    role: uniqueName(takenRoles, capability),
+    objective: `Provide the missing capability: ${capability}.`,
+    capabilities: [capability],
+    expectedOutput: [`${pascal(capability)}Report`],
+  });
+}
+
+function researcherActor(
+  topics: string[],
+  takenNames: Set<string>,
+  takenRoles: Set<string>,
+): Actor {
+  return createActor({
+    name: uniqueName(takenNames, "researcher"),
+    role: uniqueName(takenRoles, "researcher"),
+    objective: `Obtain the missing information: ${topics.join("; ")}.`,
+    capabilities: ["research"],
+    expectedOutput: ["ResearchReport"],
+  });
+}
+
+/**
+ * Insert new actors into an existing cast without disturbing what worked: their
+ * steps run just before the synthesizer, they consume everything produced so
+ * far, and — if no synthesizer exists — one is added so their output is used.
+ */
+function extendCast(previous: Cast, additions: Actor[]): Cast {
+  const actors = [...previous.actors.map(cloneActor), ...additions];
+  const steps: ProtocolStepInput[] = previous.protocol.steps.map((step) => ({
+    actor: step.actor,
+    instruction: step.instruction,
+    consumes: step.consumes.slice(),
+    produces: step.produces.slice(),
+    optional: step.optional,
+  }));
+
+  const synthIndex = steps.findIndex(
+    (step) =>
+      actors
+        .find((actor) => actor.name === step.actor)
+        ?.interactionPermissions.includes("synthesize") ?? false,
+  );
+  const insertAt = synthIndex >= 0 ? synthIndex : steps.length;
+  const priorKinds = [
+    ...new Set(steps.slice(0, insertAt).flatMap((step) => step.produces ?? [])),
+  ];
+
+  steps.splice(
+    insertAt,
+    0,
+    ...additions.map((actor) => ({
+      actor: actor.name,
+      instruction: actor.objective,
+      consumes: priorKinds.slice(),
+      produces: actor.expectedOutput.slice(),
+      optional: false,
+    })),
+  );
+
+  const newKinds = additions.flatMap((actor) => actor.expectedOutput);
+  if (synthIndex >= 0) {
+    const synthStep = steps[insertAt + additions.length]!;
+    if ((synthStep.consumes ?? []).length > 0) {
+      synthStep.consumes = [...synthStep.consumes!, ...newKinds];
+    } else {
+      // An empty consumes list means "nothing": a synthesizer that declares no
+      // inputs must still consume everything produced, or its inputs vanish.
+      const producerKinds = [
+        ...new Set(
+          steps
+            .filter((_, index) => index !== insertAt + additions.length)
+            .flatMap((step) => step.produces ?? []),
+        ),
+      ];
+      synthStep.consumes = producerKinds;
+    }
+  } else {
+    const producerKinds = [...new Set(actors.flatMap((actor) => actor.expectedOutput))];
+    const takenNames = new Set(actors.map((actor) => actor.name));
+    const takenRoles = new Set(actors.map((actor) => actor.role));
+    const synthesizer = createActor({
+      name: uniqueName(takenNames, "synthesizer"),
+      role: uniqueName(takenRoles, "synthesizer"),
+      objective: "Merge every produced artifact into a single coherent answer.",
+      capabilities: ["synthesis"],
+      expectedOutput: ["FinalAnswer"],
+      interactionPermissions: ["synthesize"],
+    });
+    actors.push(synthesizer);
+    steps.push({
+      actor: synthesizer.name,
+      instruction: synthesizer.objective,
+      consumes: producerKinds,
+      produces: ["FinalAnswer"],
+    });
+  }
+
+  return createCast(actors, createProtocol(steps, previous.protocol.notes), previous.rationale);
+}
+
 function capabilityCover(cast: Cast, required: string[]): Set<string> {
   const needed = new Set(required);
   const chosen = new Set<string>();
@@ -266,20 +444,39 @@ export class CastingDirector {
   }
 
   async cast(scene: Scene, ctx: RecastContext = { attempt: 1 }): Promise<Cast> {
-    if (!this.castFn) return deriveMinimalCast(scene);
-    const produced = await this.castFn(scene, ctx);
-    return {
-      ...produced,
-      actors: produced.actors.slice(),
-      protocol: {
-        ...produced.protocol,
-        steps: produced.protocol.steps.map((step) => ({
-          ...step,
-          consumes: step.consumes.slice(),
-          produces: step.produces.slice(),
-        })),
-      },
-    };
+    if (this.castFn) {
+      const produced = await this.castFn(scene, ctx);
+      return cloneCast(produced);
+    }
+    if (!ctx.previous) return deriveMinimalCast(scene);
+
+    // Deterministic recast: extend the previous cast with the diagnosed gaps,
+    // so a reperformance has a real chance instead of repeating the same cast.
+    const additions: Actor[] = [];
+    const takenNames = new Set(ctx.previous.actors.map((actor) => actor.name));
+    const takenRoles = new Set(ctx.previous.actors.map((actor) => actor.role));
+    if (ctx.diagnosis === "missing_capability") {
+      const covered = new Set(ctx.previous.actors.flatMap((actor) => actor.capabilities));
+      for (const capability of ctx.evaluation?.missingCapabilities ?? []) {
+        if (covered.has(capability)) continue;
+        const actor = capabilityActor(capability, takenNames, takenRoles);
+        takenNames.add(actor.name);
+        takenRoles.add(actor.role);
+        covered.add(capability);
+        additions.push(actor);
+      }
+    } else if (ctx.diagnosis === "missing_information") {
+      const topics = ctx.evaluation?.missingInformation ?? [];
+      if (topics.length > 0) {
+        const actor = researcherActor(topics, takenNames, takenRoles);
+        takenNames.add(actor.name);
+        takenRoles.add(actor.role);
+        additions.push(actor);
+      }
+    }
+
+    if (additions.length === 0) return cloneCast(ctx.previous);
+    return extendCast(ctx.previous, additions);
   }
 
   /** Structural checks: capabilities, roles, protocol wiring, minimality. */

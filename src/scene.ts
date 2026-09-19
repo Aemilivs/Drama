@@ -96,17 +96,30 @@ export function isScene(value: unknown): value is Scene {
   );
 }
 
-function normalizeCriteria(
-  input: (Criterion | Partial<Criterion> | string)[] | undefined,
-  prefix: string,
-): Criterion[] {
-  return (input ?? []).map((criterion, index) => {
-    if (typeof criterion === "string") {
-      return { id: `${prefix}-${index + 1}`, description: criterion };
+function asArray<T>(value: unknown): T[] {
+  return Array.isArray(value) ? (value as T[]).slice() : [];
+}
+
+function readStrings(value: unknown): string[] {
+  return Array.isArray(value) ? value.map((item) => String(item)) : [];
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function normalizeCriteria(input: unknown, prefix: string): Criterion[] {
+  return asArray<unknown>(input).map((raw, index) => {
+    if (typeof raw === "string") {
+      return { id: `${prefix}-${index + 1}`, description: raw };
     }
+    const criterion = (raw ?? {}) as Partial<Criterion>;
     return {
-      id: criterion.id ?? `${prefix}-${index + 1}`,
-      description: criterion.description ?? `criterion ${index + 1}`,
+      id: typeof criterion.id === "string" ? criterion.id : `${prefix}-${index + 1}`,
+      description:
+        typeof criterion.description === "string"
+          ? criterion.description
+          : `criterion ${index + 1}`,
     };
   });
 }
@@ -117,42 +130,53 @@ export function sceneFromCard(
   options: { fallbackObjective?: string; clock?: () => number } = {},
 ): Scene {
   const clock = options.clock ?? Date.now;
+  const source = (card ?? {}) as SceneCard;
   return {
     id: nextId("scene"),
-    objective: (card.objective ?? options.fallbackObjective ?? "").trim(),
-    desiredOutcome: card.desiredOutcome ?? card.desired_outcome ?? "",
-    known: toInfoItems(card.known),
-    unknown: toInfoItems(card.unknown),
-    assumed: toInfoItems(card.assumed),
-    required: toInfoItems(card.required),
-    stakeholders: (card.stakeholders ?? []).slice(),
-    constraints: (card.constraints ?? []).slice(),
-    availableTools: (card.availableTools ?? card.available_tools ?? []).slice(),
+    objective: String(source.objective ?? options.fallbackObjective ?? "").trim(),
+    desiredOutcome: String(source.desiredOutcome ?? source.desired_outcome ?? ""),
+    known: toInfoItems(source.known),
+    unknown: toInfoItems(source.unknown),
+    assumed: toInfoItems(source.assumed),
+    required: toInfoItems(source.required),
+    stakeholders: readStrings(source.stakeholders),
+    constraints: asArray<ConstraintItem>(source.constraints),
+    availableTools: readStrings(source.availableTools ?? source.available_tools),
     successCriteria: normalizeCriteria(
-      card.successCriteria ?? card.success_criteria,
+      source.successCriteria ?? source.success_criteria,
       "criterion",
     ),
-    failureModes: (card.failureModes ?? card.failure_modes ?? []).slice(),
-    requiredCapabilities: (
-      card.requiredCapabilities ?? card.required_capabilities ?? []
-    ).slice(),
-    interactionRequirements: (
-      card.interactionRequirements ?? card.interaction_requirements ?? []
-    ).slice(),
-    unresolvedQuestions: (
-      card.unresolvedQuestions ?? card.unresolved_questions ?? []
-    ).slice(),
+    failureModes: readStrings(source.failureModes ?? source.failure_modes),
+    requiredCapabilities: readStrings(
+      source.requiredCapabilities ?? source.required_capabilities,
+    ),
+    interactionRequirements: readStrings(
+      source.interactionRequirements ?? source.interaction_requirements,
+    ),
+    unresolvedQuestions: readStrings(
+      source.unresolvedQuestions ?? source.unresolved_questions,
+    ),
     createdAt: clock(),
-    meta: card.meta ?? {},
+    meta: isRecord(source.meta) ? source.meta : {},
   };
 }
 
 export function constraintText(constraint: ConstraintItem): string {
-  return typeof constraint === "string" ? constraint : constraint.text;
+  if (typeof constraint === "string") return constraint;
+  if (
+    constraint !== null &&
+    typeof constraint === "object" &&
+    typeof (constraint as { text?: unknown }).text === "string"
+  ) {
+    return (constraint as { text: string }).text;
+  }
+  return String(constraint ?? "");
 }
 
 export function constraintConflictsWith(constraint: ConstraintItem): string[] {
-  return typeof constraint === "string" ? [] : (constraint.conflictsWith ?? []);
+  if (constraint === null || typeof constraint !== "object") return [];
+  const declared = (constraint as { conflictsWith?: unknown }).conflictsWith;
+  return Array.isArray(declared) ? declared.map((item) => String(item)) : [];
 }
 
 const NEGATION =

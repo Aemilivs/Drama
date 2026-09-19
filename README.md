@@ -47,6 +47,7 @@ A single prompt forces one model to be planner, researcher, critic and author at
 | `CastingDirector` | Derives the cast and protocol from a scene; validates coverage, roles and minimality; handles recasts. | `src/cast.ts` |
 | `Evaluator` / `Evaluation` | Judges artifacts against the scene's criteria and returns `pass`/`fail`/`uncertain` plus a **diagnosis** and a recommended action. | `src/evaluation.ts` |
 | `StageManager` / `Performance` | Runs the cast, records every activation, input, output, evaluation and decision, and drives the reperform/recast/redesign loop. | `src/stage.ts` |
+| `Persona` / `Audition` | A recognizable performer that declares nothing about its fit, and the casting call that binds it to a role. | `src/persona.ts` |
 | `Artifact` | Structured, named output exchanged between actors (`ResearchReport`, `Critique`, `RootCause`, ...). | `src/types.ts` |
 
 ## Recasting: failure is a diagnosis, not a retry
@@ -145,6 +146,8 @@ The two design steps are exposed as native OpenCode skills, discovered project-l
 
 Their YAML output maps directly onto the code via `sceneFromCard` and `castFromCard`, so the same loop can be driven by an agent or embedded in a program.
 
+A project-local tool closes the loop: [`.opencode/tools/drama.ts`](.opencode/tools/drama.ts) validates cards before anything runs — `analyze_scene` reports missing fields, blocking unknowns and conflicting constraints; `validate_cast` reports capability gaps, protocol wiring errors and removable actors. It needs no model, so an agent can check the skills' output as a design-time gate.
+
 ## Example
 
 [`examples/incident-rca/run.ts`](examples/incident-rca/run.ts) is a complete, deterministic end-to-end performance. A checkout service starts returning 500s after a deploy.
@@ -178,11 +181,14 @@ bun run example
 ## Testing
 
 ```bash
-bun test          # 40 tests across scene, casting, evaluation, orchestration, e2e
+bun test          # 118 tests: behavioural suite + formalized requirements
 bun run typecheck # optional; requires `bun install` for dev types
 ```
 
-Tests assert behaviour, not class existence: capability gaps, redundant actors, role conflicts, deterministic actors, actor and evaluator failure, retry, recasting, scene redesign, and every evaluation status.
+Tests assert behaviour, not class existence. The suite has two layers:
+
+- `test/*.test.ts` — behavioural tests for scene design, casting, evaluation, orchestration and the end-to-end example.
+- `test/requirements/*.test.ts` — each test is a **formalized requirement** (`R-<area>-<n>`) with an abstract statement and a concrete example. The full matrix, plus the bugs requirements have surfaced, is in [`docs/requirements.md`](docs/requirements.md).
 
 ## Project layout
 
@@ -193,16 +199,20 @@ src/
   actor.ts       Actor, executors, tools, LLM adapter
   cast.ts        Cast, Protocol, CastingDirector, minimality, castFromCard
   evaluation.ts  Evaluation, Evaluator, diagnosis → action
-  stage.ts       StageManager, Performance, recast/redesign loop, events
+  persona.ts     Persona, Audition, Auditioner, AuditionStore, dressCast
+  opencode.ts    agent markdown → Persona adapter
+  stage.ts       StageManager, Performance, recast/redesign loop, events (incl. auditions)
   trace.ts       formatPerformance, performanceTimeline
   index.ts       public surface
 .opencode/skills/{scene-designer,casting-director}/SKILL.md
 examples/incident-rca/run.ts
 test/*.test.ts
 docs/architecture.md
+docs/actors.md
+docs/requirements.md
 ```
 
-See [`docs/architecture.md`](docs/architecture.md) for the module map and data flow.
+See [`docs/architecture.md`](docs/architecture.md) for the module map and data flow, [`docs/actors.md`](docs/actors.md) for the role/persona model, and [`docs/requirements.md`](docs/requirements.md) for the requirement matrix.
 
 ## Status
 

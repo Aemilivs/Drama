@@ -9,6 +9,7 @@
 import type { Artifact } from "./types";
 import { nextId } from "./types";
 import type { Scene } from "./scene";
+import type { Persona } from "./persona";
 
 export type ActorKind = "llm" | "deterministic" | "tool";
 
@@ -43,8 +44,19 @@ export interface Actor {
   /** Artifact kinds this actor is expected to produce. */
   expectedOutput: string[];
   exitCondition?: string;
+  /** The persona playing this role, once an audition has bound one. */
+  binding?: ActorBinding;
   /** How the actor runs. Deterministic/tool actors must supply one. */
   executor?: ActorExecutor;
+}
+
+/** Role dressed in a persona: the result of a successful audition. */
+export interface ActorBinding {
+  persona: Persona;
+  /** The approach the persona proposed for this role, if any. */
+  approach?: string;
+  /** Whether the binding came from a live audition or a cached answer. */
+  from: "audition" | "cache";
 }
 
 export interface ActorTurn {
@@ -117,6 +129,7 @@ export function createActor(
     interactionPermissions: partial.interactionPermissions?.slice() ?? [],
     expectedOutput: partial.expectedOutput?.slice() ?? [],
     exitCondition: partial.exitCondition,
+    binding: partial.binding,
     executor: partial.executor,
   };
 }
@@ -190,6 +203,15 @@ export function renderActorPrompt(ctx: ActorContext): ChatMessage[] {
     `Objective: ${actor.objective}`,
   ];
   if (actor.archetype) system.push(`Archetype (behavioural prior): ${actor.archetype}`);
+  if (actor.binding) {
+    const { persona, approach } = actor.binding;
+    system.push(
+      `Playing as: ${persona.name}${persona.archetype ? ` (${persona.archetype})` : ""}`,
+    );
+    if (persona.description) system.push(`Character: ${persona.description}`);
+    if (persona.personaPrompt) system.push(`Persona guidance: ${persona.personaPrompt}`);
+    if (approach) system.push(`Your approach to this role: ${approach}`);
+  }
   if (actor.knowledge.length) system.push(`Knowledge: ${actor.knowledge.join("; ")}`);
   if (actor.constraints.length) system.push(`Constraints: ${actor.constraints.join("; ")}`);
   if (actor.interactionPermissions.length) {

@@ -38,6 +38,10 @@ export interface Evaluation {
   issues: string[];
   recommendedAction: RecommendedAction;
   diagnosis: Diagnosis;
+  /** Capabilities the evaluator found missing — a recast should add them. */
+  missingCapabilities?: string[];
+  /** Information gaps a recast should resolve, e.g. with a research actor. */
+  missingInformation?: string[];
   createdAt: number;
   meta: Record<string, unknown>;
 }
@@ -76,7 +80,13 @@ export function actionForDiagnosis(diagnosis: Diagnosis): RecommendedAction {
 export function aggregate(
   scene: Scene,
   results: CriterionResult[],
-  options: { diagnosis?: Diagnosis; failures?: ActorFailure[]; issues?: string[] } = {},
+  options: {
+    diagnosis?: Diagnosis;
+    failures?: ActorFailure[];
+    issues?: string[];
+    missingCapabilities?: string[];
+    missingInformation?: string[];
+  } = {},
 ): Evaluation {
   const criteria = results.map((result) => ({ ...result }));
   const issues: string[] = [...(options.issues ?? [])];
@@ -122,6 +132,8 @@ export function aggregate(
     issues,
     recommendedAction,
     diagnosis,
+    missingCapabilities: options.missingCapabilities,
+    missingInformation: options.missingInformation,
     createdAt: Date.now(),
     meta: { failures },
   };
@@ -184,6 +196,8 @@ export function normalizeEvaluation(value: Evaluation, ctx: EvaluationContext): 
     issues,
     recommendedAction,
     diagnosis,
+    missingCapabilities: value.missingCapabilities,
+    missingInformation: value.missingInformation,
     createdAt: value.createdAt ?? Date.now(),
     meta: value.meta ?? {},
   };

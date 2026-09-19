@@ -476,4 +476,61 @@ describe("orchestration", () => {
     // recast (attempt 2) -> redesign casts the new scene (attempt 1) -> recast (attempt 2)
     expect(attempts).toEqual([2, 1, 2]);
   });
+
+  test("the default casting director fills a capability gap on recast", async () => {
+    const s = sceneFromCard({
+      objective: "assess",
+      success_criteria: ["compliance is covered"],
+      required_capabilities: ["analysis"],
+    });
+    const analyst = functionActor({
+      name: "analysis",
+      role: "analysis",
+      objective: "analyse",
+      capabilities: ["analysis"],
+      produces: "AnalysisReport",
+      run: () => ok([artifact("analysis", "AnalysisReport", "a")]),
+    });
+    const castA = createCast(
+      [analyst],
+      createProtocol([{ actor: "analysis", instruction: "analyse", produces: ["AnalysisReport"] }]),
+    );
+
+    const evaluator = new Evaluator((ctx): Evaluation => {
+      const covered = ctx.artifacts.some((a) => a.kind === "ComplianceReport");
+      return {
+        id: "e",
+        status: covered ? "pass" : "fail",
+        criteria: [
+          {
+            criterion: "criterion-1",
+            status: covered ? "pass" : "fail",
+            evidence: covered ? "covered" : "missing compliance",
+          },
+        ],
+        issues: [],
+        recommendedAction: covered ? "finish" : "recast",
+        diagnosis: covered ? "unspecified" : "missing_capability",
+        missingCapabilities: covered ? [] : ["compliance"],
+        createdAt: 0,
+        meta: {},
+      };
+    });
+
+    const stage = new StageManager({
+      evaluator,
+      executors: {
+        compliance: () => ok([artifact("compliance", "ComplianceReport", "c")]),
+        synthesizer: () => ok([artifact("synthesizer", "FinalAnswer", "merged")]),
+      },
+      maxPerformances: 5,
+      maxRecasts: 2,
+    });
+    const performance = await stage.perform(s, castA);
+
+    expect(performance.finalResult.status).toBe("done");
+    expect(performance.casts).toHaveLength(2);
+    expect(performance.casts[1]!.actors.map((a) => a.name)).toContain("compliance");
+    expect(performance.events.some((e) => e.type === "recast")).toBe(true);
+  });
 });

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   CastingDirector,
+  aggregate,
   castFromCard,
   createActor,
   createCast,
@@ -169,6 +170,114 @@ describe("casting", () => {
     expect(
       new CastingDirector().minimality(scene, cast).removable.map((f) => f.actor),
     ).toContain("idle");
+  });
+  test("the default director fills a diagnosed capability gap", async () => {
+    const scene = sceneWithCapabilities(["analysis"]);
+    const director = new CastingDirector();
+    const first = await director.cast(scene, { attempt: 1 });
+    const evaluation = aggregate(scene, [], {
+      diagnosis: "missing_capability",
+      missingCapabilities: ["compliance"],
+    });
+    const recast = await director.cast(scene, {
+      attempt: 2,
+      previous: first,
+      evaluation,
+      diagnosis: "missing_capability",
+    });
+
+    // actors that worked are kept, the gap is filled, the cast stays valid
+    expect(recast.actors.map((a) => a.name)).toContain("analysis");
+    expect(recast.actors.map((a) => a.name)).toContain("compliance");
+    expect(director.validate(scene, recast).filter((i) => i.severity === "error")).toHaveLength(0);
+    expect(director.minimality(scene, recast).removable).toHaveLength(0);
+  });
+
+  test("the default director adds a researcher for missing information", async () => {
+    const scene = sceneWithCapabilities(["analysis"]);
+    const director = new CastingDirector();
+    const first = await director.cast(scene, { attempt: 1 });
+    const evaluation = aggregate(scene, [], {
+      diagnosis: "missing_information",
+      missingInformation: ["current traffic volume"],
+    });
+    const recast = await director.cast(scene, {
+      attempt: 2,
+      previous: first,
+      evaluation,
+      diagnosis: "missing_information",
+    });
+
+    const researcher = recast.actors.find((a) => a.name === "researcher");
+    expect(researcher).toBeDefined();
+    expect(researcher!.expectedOutput).toEqual(["ResearchReport"]);
+    expect(director.validate(scene, recast).filter((i) => i.severity === "error")).toHaveLength(0);
+  });
+
+  test("a recast with a pre-existing synthesizer wires the new actor correctly", async () => {
+    const scene = sceneWithCapabilities(["analysis", "design"]);
+    const director = new CastingDirector();
+    const first = deriveMinimalCast(scene); // has a synthesizer
+    const evaluation = aggregate(scene, [], {
+      diagnosis: "missing_capability",
+      missingCapabilities: ["compliance"],
+    });
+    const recast = await director.cast(scene, {
+      attempt: 2,
+      previous: first,
+      evaluation,
+      diagnosis: "missing_capability",
+    });
+
+    const steps = recast.protocol.steps;
+    const names = steps.map((step) => step.actor);
+    const synthIndex = names.indexOf("synthesizer");
+    const complianceIndex = names.findIndex((name) => name.startsWith("compliance"));
+    expect(complianceIndex).toBeGreaterThanOrEqual(0);
+    expect(complianceIndex).toBeLessThan(synthIndex);
+    expect(steps[synthIndex]!.consumes).toContain("ComplianceReport");
+    expect(director.validate(scene, recast).filter((i) => i.severity === "error")).toHaveLength(0);
+    expect(director.minimality(scene, recast).removable).toHaveLength(0);
+  });
+
+  test("a recast never introduces a role conflict", async () => {
+    const scene = sceneWithCapabilities([]);
+    const alpha = createActor({
+      name: "alpha",
+      role: "compliance",
+      objective: "do",
+      capabilities: ["x"],
+      expectedOutput: ["XReport"],
+    });
+    const base = createCast(
+      [alpha],
+      createProtocol([{ actor: "alpha", instruction: "do", produces: ["XReport"] }]),
+    );
+    const evaluation = aggregate(scene, [], {
+      diagnosis: "missing_capability",
+      missingCapabilities: ["compliance"],
+    });
+    const recast = await new CastingDirector().cast(scene, {
+      attempt: 2,
+      previous: base,
+      evaluation,
+      diagnosis: "missing_capability",
+    });
+    expect(
+      new CastingDirector().validate(scene, recast).filter((i) => i.code === "role_conflict"),
+    ).toHaveLength(0);
+  });
+
+  test("a bad execution keeps the cast unchanged", async () => {
+    const scene = sceneWithCapabilities(["analysis"]);
+    const director = new CastingDirector();
+    const first = await director.cast(scene, { attempt: 1 });
+    const recast = await director.cast(scene, {
+      attempt: 2,
+      previous: first,
+      diagnosis: "bad_execution",
+    });
+    expect(recast.actors.map((a) => a.name)).toEqual(first.actors.map((a) => a.name));
   });
 });
 

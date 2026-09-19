@@ -23,6 +23,13 @@ evaluation.ts  Evaluation, Evaluator, aggregate,          │
                criterionEvaluator, actionForDiagnosis     │
   imports: types, scene (type), cast (type)               │
                                                           │
+persona.ts  Persona, Audition, Auditioner,                │
+            AuditionStore, roleFingerprint, dressCast     │
+  imports: types; scene/actor/cast (all type only)        │
+                                                          │
+opencode.ts  agent markdown → Persona                     │
+  imports: persona (type + createPersona)                 │
+                                                          │
 stage.ts  StageManager, Performance, StageEvent           │
   imports: all of the above                               │
                                                           │
@@ -30,7 +37,7 @@ trace.ts  formatPerformance, performanceTimeline          │
 index.ts  public surface (re-exports every module)        │
 ```
 
-Dependency direction is strictly one-way: `types → scene → actor → cast → evaluation → stage → trace`. The only apparent cycle (`cast` ↔ `evaluation`) is type-only — `cast.ts` imports the `Evaluation` type for `RecastContext`, and `evaluation.ts` imports the `Cast` type for `EvaluationContext`. Both are erased at runtime.
+Dependency direction is strictly one-way: `types → scene → actor → cast → evaluation → stage → trace`. `persona.ts` sits beside `actor.ts` on a type-only edge: `Actor.binding` references `Persona`, and `dressCast` consumes `Actor` — both erased at runtime. The other apparent cycle (`cast` ↔ `evaluation`) is type-only for the same reason — `cast.ts` imports the `Evaluation` type for `RecastContext`, and `evaluation.ts` imports the `Cast` type for `EvaluationContext`.
 
 ## Lifecycle and data flow
 
@@ -68,11 +75,14 @@ Cast ◀─ CastingDirector.cast(scene)    │
 ## Invariants
 
 - **One writer per artifact.** An artifact's `producedBy` is the actor that made it; inputs are never mutated.
+- **Recasts preserve what worked.** The default director extends the previous cast to fill diagnosed gaps rather than rebuilding it from the scene.
 - **Actors see the world, not each other's chats.** Context is `scene + instruction + input artifacts + turn history + tools`. There is no hidden shared prompt.
 - **Silence is not success.** A success criterion the evaluator never checked becomes `uncertain`, never `pass`.
 - **Evaluator crashes are visible.** They become an `uncertain` evaluation with an `evaluator error: …` issue and a reperform recommendation.
 - **The loop is bounded.** `maxPerformances`, `maxRecasts`, `maxRedesigns` are explicit constructor options.
+- **The boundary is total.** Card normalisers coerce or ignore malformed fields rather than throwing, so bad model output cannot crash a performance.
 - **Every decision is an event.** `StageEvent[]` is the ordered, machine-readable trace.
+- **Context is a snapshot.** An actor receives `history` as a copy, so a retained `ActorContext` never grows to include turns recorded after the actor ran.
 
 ## Executor resolution
 
@@ -83,7 +93,7 @@ For each activation the `StageManager` resolves an executor in this order:
 3. `options.chat` — wraps a `ChatFn` via `createLlmExecutor` (only for actors with `kind: "llm"`)
 4. otherwise the actor fails with `no executor available for actor "…"`
 
-This keeps deterministic actors and LLM actors interchangeable at the orchestration layer. Note: the default deterministic `CastingDirector` derives the cast purely from the scene, so a recast for an unchanged scene returns the same cast — a no-op that consumes budget. Supply a `cast` function (backed by the casting skill) for capability-aware recasting.
+This keeps deterministic actors and LLM actors interchangeable at the orchestration layer. Artifact inputs are explicit: a step's `consumes` lists the kinds it receives, and an empty list means no inputs. On a recast, the default deterministic `CastingDirector` keeps the actors that worked and fills the diagnosed gaps — adding an actor for each `evaluation.missingCapabilities`, or a researcher for `evaluation.missingInformation` — so a reperformance has a real chance instead of repeating the same cast. Supply a `cast` function (backed by the casting skill) for richer, scene-specific recasting.
 
 ## Wire formats
 
@@ -93,3 +103,20 @@ LLM skills emit YAML; the code normalises it:
 - `castFromCard(card)` → `Cast` (accepts `cast`/`actors`, `produces`/`expectedOutput`)
 
 This is the only contract between the prompts and the runtime.
+
+## Personas and dressing
+
+A cast is functional: it consists of roles. Personas are attached in a separate step, so that changing who plays a role never changes the cast's structure.
+
+```text
+Cast (roles) ──▶ dressCast(cast, scene, { personas, auditioner, store }) ──▶ Cast (roles + bindings)
+                        │
+                        ├─ per persona, one casting call with all open roles
+                        ├─ store hit  → bind from cache, no call        (audition_cached)
+                        ├─ store miss → ask, record the answer          (auditioned)
+                        └─ accepted   → bind role to persona            (persona_bound)
+```
+
+The store is keyed by `roleFingerprint` — the role's *content*, not its capability — so a refusal never becomes a declared incapacity, and a changed role spec is automatically a new question. A role nobody accepts stays a bare actor (`role_uncast`).
+
+`StageManager.perform` dresses automatically when a roster and an auditioner are supplied (`personas` + `auditioner` in `StageOptions`), and dresses again after every recast or redesign. Audition events are folded into the performance trace. Without a roster, behaviour is unchanged. See `docs/actors.md` and the `R-PERSONA-*` requirements.

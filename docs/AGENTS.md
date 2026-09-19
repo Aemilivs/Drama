@@ -8,12 +8,15 @@ Derived while building `drama`. Keep this file current as new principles are fou
 - **Zero runtime dependencies.** The library runs on Bun/TypeScript alone. Models are wired in through one injected `ChatFn`; nothing in `src/` imports a provider SDK.
 - **One-way dependencies.** `types → scene → actor → cast → evaluation → stage → trace`. The `cast ↔ evaluation` edge is type-only and must stay that way; do not introduce a runtime import between them.
 - **Prompts and code meet only at the wire format.** Skills emit YAML; `sceneFromCard` / `castFromCard` normalise it. Do not couple prompts to internal classes.
+- **The boundary is total.** `sceneFromCard`, `castFromCard`, `actorFromCard` and `createProtocol` must never throw on malformed input — coerce or ignore wrong-typed fields, because the input comes from a model. Enforced by R-PROP-3.
 - **Keep the primitive small.** Resist adding infrastructure (persistence, retries at the HTTP layer, schedulers, registries) until a concrete scene demands it.
+- **Artifact inputs are explicit.** A protocol step's `consumes` lists the kinds it receives; an empty list means no inputs. Do not reintroduce an implicit "all artifacts" default — it makes minimality and recast wiring ambiguous.
 
 ## Behavioural invariants (do not regress)
 
 - An unevaluated success criterion is `uncertain`, never `pass`.
 - An evaluator crash is `uncertain` with a visible issue, never a silent pass.
+- Actors receive a **snapshot** of the turn history, never the live array — a retained `ActorContext` must not grow after the fact.
 - A failed attempt is diagnosed; the diagnosis chooses `reperform | recast | redesign_scene`. Never hard-code "retry".
 - Recasting must preserve a correct attempt counter: the initial cast is attempt 1, so the first recast is attempt 2.
 - Minimality is enforced: an actor that is never activated, or whose capabilities are already covered and whose output is never consumed, is flagged.
@@ -35,4 +38,5 @@ Derived while building `drama`. Keep this file current as new principles are fou
 ## OpenCode integration
 
 - Reusable prompts live as project skills at `.opencode/skills/<name>/SKILL.md` with `name` + `description` frontmatter.
+- Project tools live at `.opencode/tools/<name>.ts` and export `tool({ description, args, execute })` from `@opencode-ai/plugin` (`tool.schema` is zod). `@opencode-ai/plugin` is a devDependency only; opencode provides it at runtime.
 - Prefer a native mechanism (skill, tool) over a parallel one.
