@@ -1,93 +1,213 @@
 # drama
 
+**Scene-Casting for LLM workflows.** Don't ask one actor to be the whole theatre. Design the scene, cast the actors, let them pursue local objectives, and make the result emerge from their interaction.
+
+```text
+Traditional:
+
+    Task ──▶ Agent ──▶ Answer
 
 
-## Getting started
+Scene-Casting:
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
-
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
-
-## Add your files
-
-* [Create](https://docs.gitlab.com/user/project/repository/web_editor/#create-a-file) or [upload](https://docs.gitlab.com/user/project/repository/web_editor/#upload-a-file) files
-* [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
-
+    Task
+     │
+     ▼
+    Scene          model the problem as an environment
+     │
+     ▼
+    Cast           choose the smallest set of actors + a protocol
+     │
+     ▼
+    Performance    actors pursue local goals and exchange artifacts
+     │
+     ▼
+    Evaluation     compare artifacts against the scene's criteria
+     │
+     ▼
+    Result         finish · reperform · recast · redesign the scene
 ```
-cd existing_repo
-git remote add origin https://gitlab.internal/vadim/drama.git
-git branch -M main
-git push -uf origin main
+
+A single prompt forces one model to be planner, researcher, critic and author at once. That hides the parts you most need to inspect and change. `drama` makes those parts explicit primitives: a **Scene** (the problem), a **Cast** (who acts), a **Protocol** (how they interact), a **Performance** (what happened), and an **Evaluation** (whether it worked). Orchestration is explicit and inspectable — never buried in one giant prompt.
+
+## The one rule
+
+> The goal is not "more agents". The goal is **the smallest cast capable of producing the desired outcome.**
+
+`drama` will happily run a one-actor cast when that is what the scene needs. An actor is a *participant with a responsibility and an interface* — not a model. It may be an LLM, a deterministic function, a test suite, a compiler, a search, or a database query.
+
+## Core abstractions
+
+| Concept | What it is | Where |
+| --- | --- | --- |
+| `Scene` | The problem as an environment: objective, known/unknown/assumed, constraints, success criteria, required capabilities, failure modes. May be incomplete by design. | `src/scene.ts` |
+| `SceneDesigner` | Turns a request into a `Scene`, and reports what is still missing. Asks questions only when the gap changes the architecture. | `src/scene.ts` |
+| `Actor` | Role + local objective + capabilities + tools + constraints + permissions + expected artifact + exit condition. | `src/actor.ts` |
+| `Cast` / `Protocol` | The chosen actors and the explicit, ordered interaction between them. | `src/cast.ts` |
+| `CastingDirector` | Derives the cast and protocol from a scene; validates coverage, roles and minimality; handles recasts. | `src/cast.ts` |
+| `Evaluator` / `Evaluation` | Judges artifacts against the scene's criteria and returns `pass`/`fail`/`uncertain` plus a **diagnosis** and a recommended action. | `src/evaluation.ts` |
+| `StageManager` / `Performance` | Runs the cast, records every activation, input, output, evaluation and decision, and drives the reperform/recast/redesign loop. | `src/stage.ts` |
+| `Artifact` | Structured, named output exchanged between actors (`ResearchReport`, `Critique`, `RootCause`, ...). | `src/types.ts` |
+
+## Recasting: failure is a diagnosis, not a retry
+
+```text
+Performance ──▶ Evaluation ──▶ failure ──▶ diagnosis
+                                             ├── bad_execution      → reperform
+                                             ├── missing_capability → recast
+                                             ├── missing_information→ recast (add a research actor)
+                                             └── malformed_problem  → redesign the scene
 ```
 
-## Integrate with your tools
+A failed attempt does not automatically mean "try again". If the cast lacked a capability, retrying is wasted; the system recasts. If the *question* was wrong, it returns to scene design. The diagnosis selects the action, and the whole loop is bounded by explicit budgets.
 
-* [Set up project integrations](https://gitlab.internal/vadim/drama/-/settings/integrations)
+## Quickstart
 
-## Collaborate with your team
+```ts
+import {
+  StageManager, Evaluator, CastingDirector, SceneDesigner,
+  createCast, createProtocol, functionActor, sceneFromCard,
+  criterionEvaluator, artifact, ok, formatPerformance,
+} from "drama"; // in-repo: from "./src/index.ts"
 
-* [Invite team members and collaborators](https://docs.gitlab.com/user/project/members/)
-* [Create a new merge request](https://docs.gitlab.com/user/project/merge_requests/creating_merge_requests/)
-* [Automatically close issues from merge requests](https://docs.gitlab.com/user/project/issues/managing_issues/#closing-issues-automatically)
-* [Enable merge request approvals](https://docs.gitlab.com/user/project/merge_requests/approvals/)
-* [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
+const scene = sceneFromCard({
+  objective: "Review this migration for data-loss risk",
+  success_criteria: ["Names a concrete data-loss scenario", "Proposes a mitigation"],
+  required_capabilities: ["migration_analysis"],
+});
 
-## Test and Deploy
+const analyst = functionActor({
+  name: "analyst", role: "migration analyst", objective: "Analyse the migration",
+  capabilities: ["migration_analysis"], produces: "RiskReport",
+  run: () => ok([artifact("analyst", "RiskReport", {
+    risks: ["backfill on a live table"],
+    mitigation: "backfill in batches behind a feature flag",
+  })]),
+});
 
-Use the built-in continuous integration in GitLab.
+const cast = createCast(
+  [analyst],
+  createProtocol([{ actor: "analyst", instruction: "analyse", produces: ["RiskReport"] }]),
+);
 
-* [Get started with GitLab CI/CD](https://docs.gitlab.com/ci/quick_start/)
-* [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/user/application_security/sast/)
-* [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/topics/autodevops/requirements/)
-* [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/user/clusters/agent/)
-* [Set up protected environments](https://docs.gitlab.com/ci/environments/protected_environments/)
+const report = (ctx) =>
+  ctx.artifacts.find((a) => a.kind === "RiskReport")?.content as
+    | { risks: string[]; mitigation?: string }
+    | undefined;
 
-***
+// Two criteria, two checks: a criterion left unchecked is `uncertain`, not a pass.
+const evaluator = new Evaluator(criterionEvaluator([
+  { criterion: scene.successCriteria[0]!, check: (ctx) =>
+      report(ctx)?.risks.length
+        ? { status: "pass", evidence: "data-loss scenario named" }
+        : { status: "fail", evidence: "no scenario named" } },
+  { criterion: scene.successCriteria[1]!, check: (ctx) =>
+      report(ctx)?.mitigation
+        ? { status: "pass", evidence: "mitigation proposed" }
+        : { status: "fail", evidence: "no mitigation proposed" } },
+]));
 
-# Editing this README
+const stage = new StageManager({
+  evaluator,
+  castingDirector: new CastingDirector(),
+  sceneDesigner: new SceneDesigner(),
+});
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+const performance = await stage.perform(scene, cast);
+console.log(performance.finalResult.status);   // "done" | "failed"
+console.log(formatPerformance(performance));    // full, ordered trace
+```
 
-## Suggestions for a good README
+To run the **whole lifecycle** — design, cast, perform, evaluate, recast — use `stage.run(request)`. It returns `{ kind: "needs_input", questions }` when a blocking unknown must be resolved first, otherwise `{ kind: "performance", performance }`.
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+### Using real models
 
-## Name
-Choose a self-explaining name for your project.
+`drama` has **zero runtime dependencies**. Wire any model in through one function:
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+```ts
+import { createLlmExecutor, functionActor } from "drama";
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+const researcher = functionActor({
+  name: "researcher", role: "researcher", objective: "Find prior art",
+  capabilities: ["research"], produces: "ResearchReport",
+  run: createLlmExecutor(async (messages) => myModel(messages)),
+});
+```
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+`renderActorPrompt` builds the prompt from the actor card plus its input artifacts, so the orchestration stays visible. Non-LLM actors need no adapter at all.
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+## OpenCode integration
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+The two design steps are exposed as native OpenCode skills, discovered project-locally:
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+- [`.opencode/skills/scene-designer/SKILL.md`](.opencode/skills/scene-designer/SKILL.md) — request → Scene Card (YAML).
+- [`.opencode/skills/casting-director/SKILL.md`](.opencode/skills/casting-director/SKILL.md) — Scene Card → cast + protocol (YAML).
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+Their YAML output maps directly onto the code via `sceneFromCard` and `castFromCard`, so the same loop can be driven by an agent or embedded in a program.
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
+## Example
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+[`examples/incident-rca/run.ts`](examples/incident-rca/run.ts) is a complete, deterministic end-to-end performance. A checkout service starts returning 500s after a deploy.
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+- A **single generic answer** blames the loudest symptom: *"The database is overloaded; scale up the database."* — 0/4 criteria.
+- The **cast** — metrics analyst, change researcher, skeptic, synthesizer — rules out the symptom and converges on the actual cause: a bcrypt cost increase made login slower, exhausting the connection pool. — 4/4 criteria.
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+The difference comes from one actor whose local objective is to *falsify* the others. Run it offline:
+
+```bash
+bun run example
+```
+
+## Design principles
+
+1. Scene before cast.
+2. Cast before execution.
+3. Roles before prompts.
+4. Local objectives are explicit.
+5. Actors may disagree.
+6. Disagreement can be productive.
+7. Actors need not be LLMs.
+8. Artifacts are preferable to opaque conversations.
+9. Evaluation is part of the performance.
+10. Failure may require recasting rather than retrying.
+11. The cast is minimal.
+12. Orchestration stays observable.
+13. A persona is not a capability.
+14. **Do not add an actor unless its presence changes the solution space.**
+
+## Testing
+
+```bash
+bun test          # 40 tests across scene, casting, evaluation, orchestration, e2e
+bun run typecheck # optional; requires `bun install` for dev types
+```
+
+Tests assert behaviour, not class existence: capability gaps, redundant actors, role conflicts, deterministic actors, actor and evaluator failure, retry, recasting, scene redesign, and every evaluation status.
+
+## Project layout
+
+```text
+src/
+  types.ts       shared primitives (Status, Artifact, Diagnosis, ids)
+  scene.ts       Scene, SceneCard, SceneDesigner, conflict detection
+  actor.ts       Actor, executors, tools, LLM adapter
+  cast.ts        Cast, Protocol, CastingDirector, minimality, castFromCard
+  evaluation.ts  Evaluation, Evaluator, diagnosis → action
+  stage.ts       StageManager, Performance, recast/redesign loop, events
+  trace.ts       formatPerformance, performanceTimeline
+  index.ts       public surface
+.opencode/skills/{scene-designer,casting-director}/SKILL.md
+examples/incident-rca/run.ts
+test/*.test.ts
+docs/architecture.md
+```
+
+See [`docs/architecture.md`](docs/architecture.md) for the module map and data flow.
+
+## Status
+
+A small foundational primitive, deliberately not a framework. See [`docs/ROADMAP.md`](docs/ROADMAP.md) for what is intentionally out of scope.
 
 ## License
-For open source projects, say how it is licensed.
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+MIT
