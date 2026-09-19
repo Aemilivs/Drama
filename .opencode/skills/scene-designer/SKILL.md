@@ -73,3 +73,5 @@ Valid `unknown` entries: `- "plain text"` or `- { text: "...", blocking: true }`
 ## Calibration
 
 Prefer a slightly under-specified scene with honest `unknown`s over an over-specified one full of invented facts. The scene exists to make the *cast* decision possible, not to be exhaustive.
+
+A **meta scene** ("decide what to do next given what has been done") is still a scene. Its objective is the decision; its success criteria are that the options are grounded in evidence and bounded in number; and its `required_capabilities` should separate *observation* (often deterministic) from *judgement*. Name the capability, never a role.

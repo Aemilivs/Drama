@@ -8,6 +8,7 @@ Derived while building `drama`. Keep this file current as new principles are fou
 - **Zero runtime dependencies.** The library runs on Bun/TypeScript alone. Models are wired in through one injected `ChatFn`; nothing in `src/` imports a provider SDK.
 - **One-way dependencies.** `types → scene → actor → cast → evaluation → stage → trace`. The `cast ↔ evaluation` edge is type-only and must stay that way; do not introduce a runtime import between them.
 - **Prompts and code meet only at the wire format.** Skills emit YAML; `sceneFromCard` / `castFromCard` normalise it. Do not couple prompts to internal classes.
+- **Never crystallise a role.** Roles are derived per scene. To shape behaviour, add an *example* to the casting prompt — not a fixed role or a dedicated agent. Personas are the crystallisable layer, and even they must audition.
 - **The boundary is total.** `sceneFromCard`, `castFromCard`, `actorFromCard` and `createProtocol` must never throw on malformed input — coerce or ignore wrong-typed fields, because the input comes from a model. Enforced by R-PROP-3.
 - **Keep the primitive small.** Resist adding infrastructure (persistence, retries at the HTTP layer, schedulers, registries) until a concrete scene demands it.
 - **Artifact inputs are explicit.** A protocol step's `consumes` lists the kinds it receives; an empty list means no inputs. Do not reintroduce an implicit "all artifacts" default — it makes minimality and recast wiring ambiguous.

@@ -68,6 +68,43 @@ When invoked again with a previous cast, an evaluation, and a diagnosis, change 
 
 Keep actors that succeeded. Remove actors whose capability the evaluation showed to be redundant.
 
+## Worked example: a meta scene (deriving roles, not naming them)
+
+Scene: *"Decide what to do next, given everything done so far in this project."* Its `required_capabilities` might be `[work_state_observation, continuation_judgment]`.
+
+Derive, do not reach for a template:
+
+- `work_state_observation` is **deterministic** — gather what exists (open roadmap items, unresolved findings, git state, check results). Reading files and running checks is the wrong job for a model.
+
+```yaml
+- name: state-gatherer
+  role: work state observation
+  objective: Report the project's actual state — open work, unresolved findings, recent changes, check results.
+  kind: deterministic
+  capabilities: [work_state_observation]
+  tools: [git, test-runner, filesystem]
+  constraints: [report only what exists; never speculate]
+  expectedOutput: [WorkState]
+```
+
+- `continuation_judgment` is the **model's** job: turning a state report into candidate next moves is judgement, not retrieval.
+
+```yaml
+- name: next-move-proposer
+  role: continuation judgment
+  objective: Propose 2-4 grounded next moves with trade-offs, and recommend one.
+  kind: llm
+  capabilities: [continuation_judgment]
+  constraints: [options must cite evidence; bound the set to 2-4]
+  expectedOutput: [NextMoves]
+```
+
+Protocol: `state-gatherer` produces `WorkState`; `next-move-proposer` consumes it and produces `NextMoves`. Two actors, one deterministic, one not — the smallest cast that can do the job.
+
+Note what is **not** here: no role is named "continuation director". The role is whatever these capabilities require; if the scene recurs, the derivation is re-run, not looked up. Crystallising this pattern into a fixed agent would turn a derived role into a declared one — the canonical cast this skill exists to avoid.
+
+An artifact may have a **human** consumer. `NextMoves` is rendered as a question with 2-4 options and a recommendation, and only when the choice materially changes direction; otherwise proceed.
+
 ## Calibration
 
 A persona is useful only insofar as it improves behaviour. If `archetype` adds nothing beyond `role` and `objective`, omit it. Do not confuse a persona with a capability.

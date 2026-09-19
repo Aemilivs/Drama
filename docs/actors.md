@@ -33,6 +33,15 @@ This is what keeps "persona ≠ capability" honest. It is enforced by `R-PERSONA
 
 A persona does **not** declare tags, suited roles, or a capability list. In life, performers do not know in advance how they will play a character — and a modest persona can suddenly play an unexpected role brilliantly. So the roster has no metadata to filter on, and casting never reads persona metadata to include or exclude a role.
 
+## Where crystallisation is legitimate
+
+Roles and personas crystallise differently, and confusing the two is the failure mode this model exists to prevent:
+
+- **Roles are derived per scene — never predefined.** A fixed "continuation director" role, or a canonical Planner → Researcher → Critic → Executor, is a declared cast. Roles come from `requiredCapabilities` via the casting skill (or the deterministic fallback) every time.
+- **Personas may be a curated roster.** Recognisability is the roster's whole point: a named character can be reused across scenes. But a persona still declares nothing and still auditions for every role.
+
+So the lever for shaping behaviour is **not** a new role — it is an example in the casting prompt that teaches how to *derive* the role for a class of scene. Examples teach derivation, not answers.
+
 ## The audition replaces tags and pinning
 
 The binding is discovered by **asking the persona directly**:
