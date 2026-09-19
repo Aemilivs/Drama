@@ -213,6 +213,62 @@ describe("Graph guardrail requirements", () => {
     expect(performance.finalResult.reason).toContain("max turns");
   });
 
+  test("R-GUARD-9 an independent pair declared in sequence is reported as a fake edge", () => {
+    const s = scene(["a", "b", "c"]);
+    const independent = createCast(
+      [worker("a", "A"), worker("b", "B")],
+      createProtocol([
+        { actor: "a", instruction: "go", produces: ["A"] },
+        { actor: "b", instruction: "go", produces: ["B"] },
+      ]),
+    );
+    const found = new CastingDirector()
+      .validate(s, independent)
+      .find((issue) => issue.code === "independent_steps");
+    expect(found?.severity).toBe("warning");
+    expect(found?.message).toContain("step-1");
+    expect(found?.message).toContain("step-2");
+
+    const dependent = createCast(
+      [worker("a", "A"), worker("b", "B")],
+      createProtocol([
+        { actor: "a", instruction: "go", produces: ["A"] },
+        { actor: "b", instruction: "go", consumes: ["A"], produces: ["B"] },
+      ]),
+    );
+    expect(
+      new CastingDirector().validate(s, dependent).some((i) => i.code === "independent_steps"),
+    ).toBe(false);
+  });
+
+  test("R-GUARD-10 terminal artifacts with several owners are reported", () => {
+    const s = scene(["a", "b"]);
+    const split = createCast(
+      [worker("a", "A"), worker("b", "B")],
+      createProtocol([
+        { actor: "a", instruction: "go", produces: ["A"] },
+        { actor: "b", instruction: "go", produces: ["B"] },
+      ]),
+    );
+    const found = new CastingDirector()
+      .validate(s, split)
+      .find((issue) => issue.code === "no_merge_owner");
+    expect(found?.severity).toBe("warning");
+    expect(found?.actors.sort()).toEqual(["a", "b"]);
+
+    const merged = createCast(
+      [worker("a", "A"), worker("b", "B"), worker("c", "C")],
+      createProtocol([
+        { actor: "a", instruction: "go", produces: ["A"] },
+        { actor: "b", instruction: "go", produces: ["B"] },
+        { actor: "c", instruction: "go", consumes: ["A", "B"], produces: ["C"] },
+      ]),
+    );
+    expect(
+      new CastingDirector().validate(s, merged).some((i) => i.code === "no_merge_owner"),
+    ).toBe(false);
+  });
+
   test("R-GUARD-8 planWaves previews the schedule the stage will run", () => {
     const cast = createCast(
       [worker("a", "A"), worker("b", "B"), worker("c", "C")],

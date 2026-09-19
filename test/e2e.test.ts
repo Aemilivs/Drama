@@ -21,10 +21,14 @@ describe("incident root-cause example", () => {
     expect(result.baselineScore.namesSpecificCause).toBe(false);
   });
 
-  test("the example's designed conflict validates cleanly", () => {
+  test("the example validates cleanly, and its fake edge is reported", () => {
     const issues = new CastingDirector().validate(buildScene(), buildCast());
     expect(issues.filter((issue) => issue.severity === "error")).toHaveLength(0);
-    expect(issues.filter((issue) => issue.severity === "warning")).toHaveLength(0);
+    // The two analysts never read each other: the protocol serializes them, and
+    // the fake-edge check says so instead of hiding it.
+    expect(issues.filter((issue) => issue.severity === "warning").map((issue) => issue.code)).toEqual([
+      "independent_steps",
+    ]);
     expect(buildCast().actors.find((actor) => actor.name === "skeptic")?.stance).toEqual({
       opposes: "metrics_analysis",
       toYield: "Critique",

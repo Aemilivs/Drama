@@ -233,6 +233,8 @@ Borrowed from the `/graph` task-graph runner, which already enforced them: a hum
 | R-GUARD-6 | `maxConcurrency` caps how many steps share a wave. | Three independent steps, cap 2 → in-flight never exceeds 2. |
 | R-GUARD-7 | `maxTurns` stops the performance with a clear reason. | One turn, then `failed` with a reason containing "max turns". |
 | R-GUARD-8 | `planWaves` previews the schedule the stage will run. | `[[step-1, step-2], [step-3]]`; with cap 1, three waves. |
+| R-GUARD-9 | An independent pair declared in sequence is reported as a fake edge. | Two `consumes: []` steps → `independent_steps`; a dependent pair → silent. |
+| R-GUARD-10 | Terminal artifacts with several owners are reported. | Two terminal producers → `no_merge_owner`; a synthesizer consuming both → silent. |
 
 ## Property — `test/requirements/properties.requirements.test.ts`
 
@@ -271,6 +273,7 @@ Requirements are not just documentation — writing them surfaces bugs. So far:
 - **Pre-merge review closed four robustness gaps.** The file store threw on a valid-JSON/wrong-shape file (now filters entries); the casting-call parser used a greedy `lastIndexOf("}")` and lost a valid answer followed by another object (now scans for the first balanced object); the selection knobs existed on `dressCast` but not through `StageManager` (now forwarded); and a `select` naming a non-candidate silently bound a different persona (now leaves the role uncast). Three smaller ones: out-of-batch answers are ignored, `unused_conflict_yield` no longer counts the stancer's own step, and a stance must run after *every* target with an inactive target flagged.
 - **The second review found three more.** Executor registries were read through the prototype chain, so an actor named `constructor` crashed the stage and one named `valueOf` silently ran the wrong function — lookups are now own-property only (R-PARALLEL-8, R-SERIAL-7). `unused_conflict_yield` still counted a *later* step by the stancer (R-CONFLICT-9). And the serialiser accepted a structurally broken payload and a future `formatVersion`, failing with a raw `TypeError` — it now validates the payload shape, rejects newer versions, and drops any executor smuggled into an already-parsed document (R-SERIAL-8/9).
 - **Borrowing `/graph`'s guardrails closed a hole the parallel feature had.** A wave could run two steps writing the same file; `owns` plus one-writer-per-wave validation now rejects that, and `planWaves` makes the schedule inspectable before it runs. The same source supplied the human gate (`gate: true`, failing closed) that Principle 9 required but the framework could not express.
+- **Checking the doctrine found a fake edge in our own flagship example.** The incident cast's two analysts never read each other, yet the protocol serialized them; the task-graph discipline says that edge is fake. It is now reported as `independent_steps` instead of passing silently (R-GUARD-9), and the same audit added `no_merge_owner` for the stop rule's "one owner of the merge" (R-GUARD-10).
 
 ## Adding a requirement
 

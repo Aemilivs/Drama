@@ -58,7 +58,9 @@ export type CastIssueCode =
   | "unused_conflict_yield"
   | "stance_before_target"
   | "stance_target_inactive"
-  | "owns_conflict";
+  | "owns_conflict"
+  | "independent_steps"
+  | "no_merge_owner";
 
 export interface CastIssue {
   severity: "error" | "warning";
@@ -702,9 +704,11 @@ export class CastingDirector {
       }
     }
 
+    const waves = planWaves(cast.protocol.steps);
+
     // One writer per file: two steps that may write overlapping paths must not
     // be able to run in the same wave.
-    for (const wave of planWaves(cast.protocol.steps)) {
+    for (const wave of waves) {
       if (wave.length < 2) continue;
       for (let i = 0; i < wave.length; i += 1) {
         for (let j = i + 1; j < wave.length; j += 1) {
@@ -723,6 +727,46 @@ export class CastingDirector {
           }
         }
       }
+    }
+
+    // Fake edges: steps that never read each other's result are declared in an
+    // implied order they do not need.
+    for (const wave of waves) {
+      if (wave.length < 2) continue;
+      issues.push({
+        severity: "warning",
+        code: "independent_steps",
+        message: `Steps ${wave
+          .map((step) => `"${step.id}"`)
+          .join(", ")} do not depend on one another and could run in a wave.`,
+        actors: wave.map((step) => step.actor),
+      });
+    }
+
+    // One owner of the merge: if several actors produce artifacts that nobody
+    // consumes, the result has no single owner.
+    const allConsumed = new Set<string>();
+    for (const step of cast.protocol.steps) {
+      for (const kind of step.consumes) allConsumed.add(kind);
+    }
+    const terminalOwners = new Map<string, string[]>();
+    for (const step of cast.protocol.steps) {
+      for (const kind of step.produces) {
+        if (allConsumed.has(kind)) continue;
+        const owned = terminalOwners.get(step.actor) ?? [];
+        owned.push(kind);
+        terminalOwners.set(step.actor, owned);
+      }
+    }
+    if (terminalOwners.size > 1) {
+      issues.push({
+        severity: "warning",
+        code: "no_merge_owner",
+        message: `Terminal artifacts have ${terminalOwners.size} owners (${[...terminalOwners.keys()].join(
+          ", ",
+        )}); if the scene expects one result, add a step that consumes them.`,
+        actors: [...terminalOwners.keys()],
+      });
     }
 
     for (const finding of this.minimality(scene, cast).removable) {
