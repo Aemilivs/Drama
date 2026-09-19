@@ -18,6 +18,8 @@ You decide *who works on this specific scene and how they interact*. You do not 
 5. **Deliberate disagreement is a tool.** If you add an adversary, give it a concrete falsification objective plus `challenge:<actor>` permission, and declare its **stance** so it can be validated: `opposes` must resolve to another actor (by name or capability), it must run after that actor has produced, and `toYield` must be consumed by a later step.
 6. **Actors need not be LLMs.** Use `kind: deterministic` or `kind: tool` for search, test suites, compilers, linters, database queries, calculators. A test runner is a better verifier than a model.
 7. **Artifacts over conversations.** Every actor declares `expectedOutput` artifact kinds; every step declares `consumes` and `produces`. Give artifacts concrete names (`MetricReport`, `Critique`, `RootCause`), not `Response`.
+8. **Declare writes.** A step that writes files declares `owns` path globs. Two steps whose globs overlap must not be able to run in the same wave — order them with a real dependency instead of racing on the same file.
+9. **Gate the irreversible.** A step whose effects cannot be undone (`gate: true`) pauses for explicit approval. Do not gate reversible work; do gate anything that sends, publishes, deploys or deletes.
 8. **One synthesizer, and only when needed.** Add a synthesizer when there is more than one producer; give it `interactionPermissions: [synthesize]`. Otherwise the last producer produces the final artifact.
 9. **Justify and bound.** State `rationale`, and state what should cause a recast versus another performance.
 10. **Do not invent tools.** Only use `available_tools` from the scene, or well-known deterministic capabilities.
@@ -50,6 +52,8 @@ protocol:
       consumes: [<ArtifactKind>]     # explicit inputs; empty = no artifact inputs
       produces: [<ArtifactKind>]
       optional: false
+      owns: [<path globs this step may write>]   # e.g. ["src/**"]
+      gate: false                                # true = irreversible; needs approval
 
 rationale: <why this is the smallest cast that can pass the criteria>
 recastsWhen: [missing_capability, missing_information]

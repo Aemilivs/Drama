@@ -30,6 +30,7 @@ Core primitive complete and tested.
 
 - [x] A JSON (de)serialiser for `Performance` (`src/serialize.ts`): executors are re-attached by actor name on load, and a replay re-supplies the evaluator.
 - [x] Optional parallel step execution: `parallel: true` runs independent consecutive steps in waves, order-preserving and opt-in (`R-PARALLEL-*`).
+- [x] Guardrails borrowed from the `/graph` runner: step `gate` (human approval, fail-closed), `owns` write globs with one-writer-per-wave validation, `maxConcurrency`/`maxTurns` caps, `planWaves` dry-run preview (`R-GUARD-*`).
 
 ## Next
 

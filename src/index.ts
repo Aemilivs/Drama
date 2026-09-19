@@ -84,6 +84,9 @@ export {
   deriveMinimalCast,
   actorFromCard,
   castFromCard,
+  globPrefix,
+  globsOverlap,
+  planWaves,
 } from "./cast";
 
 export type {
@@ -111,6 +114,8 @@ export type {
   RunOutcome,
   StageOptions,
   StageManagerOptions,
+  GateRequest,
+  Approver,
 } from "./stage";
 export { StageManager } from "./stage";
 

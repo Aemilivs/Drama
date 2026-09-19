@@ -37,6 +37,7 @@ export type StageEvent =
   | { type: "recast"; attempt: number; diagnosis: Diagnosis; actors: string[] }
   | { type: "redesign"; attempt: number; diagnosis: Diagnosis; sceneId: string }
   | { type: "finished"; status: "done" | "failed"; reason: string }
+  | { type: "gate"; iteration: number; step: string; actor: string; approved: boolean }
   | AuditionEvent;
 
 export interface IterationRecord {
@@ -101,8 +102,27 @@ export interface StageOptions {
    * run concurrently.
    */
   parallel?: boolean;
+  /** Cap on how many steps a wave may contain. Defaults to unbounded. */
+  maxConcurrency?: number;
+  /** Cap on actor executions across the whole performance. */
+  maxTurns?: number;
+  /**
+   * Approves a gated step. Absent or false means the gate is denied, and a
+   * denied required step halts the performance — gates fail closed.
+   */
+  approve?: Approver;
   onEvent?: (event: StageEvent) => void;
 }
+
+/** What a gate is asked about. `actor` is undefined if the step names nobody. */
+export interface GateRequest {
+  iteration: number;
+  step: ProtocolStep;
+  actor?: Actor;
+  scene: Scene;
+}
+
+export type Approver = (request: GateRequest) => boolean | Promise<boolean>;
 
 export interface StageManagerOptions extends StageOptions {
   evaluator: Evaluator;
@@ -167,6 +187,9 @@ export class StageManager {
       askAll: options.askAll,
       select: options.select,
       parallel: options.parallel,
+      maxConcurrency: options.maxConcurrency,
+      maxTurns: options.maxTurns,
+      approve: options.approve,
       onEvent: options.onEvent,
     };
   }
@@ -267,7 +290,11 @@ export class StageManager {
         decision: null,
       };
 
-      const maxWaveSize = opts.parallel ? Number.POSITIVE_INFINITY : 1;
+      const maxWaveSize = opts.parallel
+        ? opts.maxConcurrency && opts.maxConcurrency > 0
+          ? opts.maxConcurrency
+          : Number.POSITIVE_INFINITY
+        : 1;
       const remaining = [...cast.protocol.steps];
       const produced = new Set<string>();
       let halted = false;
@@ -283,7 +310,58 @@ export class StageManager {
         }
         if (wave.length === 0) wave.push(remaining[0]!);
 
-        const prepared: PreparedStep[] = wave.map((step) => {
+        if (opts.maxTurns !== undefined && turns.length + wave.length > opts.maxTurns) {
+          halted = true;
+          result = {
+            status: "failed",
+            reason: `max turns reached (${opts.maxTurns})`,
+            artifacts: artifacts.slice(),
+            evaluation: null,
+          };
+          break;
+        }
+
+        // Gates are resolved before anything in the wave runs. A denied required
+        // step halts the performance; a denied optional step is skipped.
+        const admitted: ProtocolStep[] = [];
+        let gateHalted = false;
+        for (const step of wave) {
+          if (!step.gate) {
+            admitted.push(step);
+            continue;
+          }
+          const gatedActor = cast.actors.find((candidate) => candidate.name === step.actor);
+          const approved = await this.approve(
+            { iteration: iterationIndex, step, actor: gatedActor, scene },
+            opts,
+          );
+          emit({
+            type: "gate",
+            iteration: iterationIndex,
+            step: step.id,
+            actor: step.actor,
+            approved,
+          });
+          if (approved) {
+            admitted.push(step);
+            continue;
+          }
+          record.failures.push({ actor: step.actor, step: step.id, error: "gate not approved" });
+          emit({
+            type: "actor_failed",
+            iteration: iterationIndex,
+            step: step.id,
+            actor: step.actor,
+            error: "gate not approved",
+          });
+          if (!step.optional) gateHalted = true;
+        }
+        if (gateHalted) {
+          halted = true;
+          break;
+        }
+
+        const prepared: PreparedStep[] = admitted.map((step) => {
           const actor = cast.actors.find((candidate) => candidate.name === step.actor);
           if (!actor) return { step, inputs: [] };
           const inputs = selectInputs(artifacts, step.consumes);
@@ -505,6 +583,16 @@ export class StageManager {
       events,
       finalResult: result,
     };
+  }
+
+  /** Gates fail closed: no approver, a throw, or a false all mean "denied". */
+  private async approve(request: GateRequest, opts: StageOptions): Promise<boolean> {
+    if (!opts.approve) return false;
+    try {
+      return (await opts.approve(request)) === true;
+    } catch {
+      return false;
+    }
   }
 
   private resolveExecutor(actor: Actor, opts: StageOptions): ActorExecutor {

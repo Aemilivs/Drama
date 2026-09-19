@@ -87,7 +87,8 @@ Cast ◀─ CastingDirector.cast(scene)    │
 - **Every decision is an event.** `StageEvent[]` is the ordered, machine-readable trace.
 - **Context is a snapshot.** An actor receives `history` as a copy, so a retained `ActorContext` never grows to include turns recorded after the actor ran.
 - **Conflict is designed, not incidental.** A role's `stance` is validated: it must target a real actor, run after that actor produced, and yield an artifact a later step consumes.
-- **Parallelism is opt-in and order-preserving.** With `parallel: true`, independent consecutive steps run in waves; a wave shares one history snapshot. Turns and artifacts follow declaration order, and within a wave every activation is emitted before its outputs. Executors and tools must tolerate concurrency.
+- **Parallelism is opt-in and order-preserving.** With `parallel: true`, independent consecutive steps run in waves; a wave shares one history snapshot. Turns and artifacts follow declaration order, and within a wave every activation is emitted before its outputs. Executors and tools must tolerate concurrency. `maxConcurrency` caps a wave; `maxTurns` caps total executions.
+- **Guardrails mirror `/graph`.** A step may declare `gate: true` (irreversible → explicit approval, and gates fail closed when no approver answers) and `owns` write globs — two steps with overlapping globs may not share a wave. `planWaves` previews the schedule without running it.
 
 ## Executor resolution
 

@@ -24,6 +24,13 @@ export interface ProtocolStep {
   consumes: string[];
   produces: string[];
   optional: boolean;
+  /**
+   * Path globs this step may write. Two steps with overlapping globs must not
+   * be able to run in the same wave — one writer per file.
+   */
+  owns?: string[];
+  /** Irreversible edge: requires explicit approval before it runs. */
+  gate?: boolean;
 }
 
 export interface Protocol {
@@ -50,7 +57,8 @@ export type CastIssueCode =
   | "dangling_stance"
   | "unused_conflict_yield"
   | "stance_before_target"
-  | "stance_target_inactive";
+  | "stance_target_inactive"
+  | "owns_conflict";
 
 export interface CastIssue {
   severity: "error" | "warning";
@@ -82,6 +90,8 @@ export interface ProtocolStepInput {
   consumes?: string[];
   produces?: string[];
   optional?: boolean;
+  owns?: string[];
+  gate?: boolean;
 }
 
 export function createProtocol(steps: ProtocolStepInput[], notes = ""): Protocol {
@@ -95,6 +105,8 @@ export function createProtocol(steps: ProtocolStepInput[], notes = ""): Protocol
         consumes: readStrings(step.consumes),
         produces: readStrings(step.produces),
         optional: step.optional === true,
+        owns: readStrings(step.owns),
+        gate: step.gate === true,
       };
     }),
     notes: typeof notes === "string" ? notes : "",
@@ -103,6 +115,57 @@ export function createProtocol(steps: ProtocolStepInput[], notes = ""): Protocol
 
 export function createCast(actors: Actor[], protocol: Protocol, rationale = ""): Cast {
   return { id: nextId("cast"), actors, protocol, rationale, createdAt: Date.now() };
+}
+
+/**
+ * The stable, non-wildcard prefix of a glob. Deliberately conservative: a bare
+ * `**` prefix matches everything, so it is reported as overlapping broadly.
+ */
+export function globPrefix(glob: string): string {
+  const text = typeof glob === "string" ? glob : "";
+  const wildcard = text.search(/[*?[{]/);
+  const prefix = wildcard === -1 ? text : text.slice(0, wildcard);
+  return prefix.replace(/\/+$/, "");
+}
+
+/** Two globs overlap if either non-wildcard prefix contains the other. */
+export function globsOverlap(a: string, b: string): boolean {
+  const left = globPrefix(a);
+  const right = globPrefix(b);
+  if (left === "" || right === "") return true;
+  return left.startsWith(right) || right.startsWith(left);
+}
+
+/**
+ * Dependency-based execution waves: a step joins the current wave while its
+ * `consumes` are already produced by earlier waves. The stage uses the same
+ * rule, so a plan is a faithful preview of execution.
+ */
+export function planWaves(
+  steps: ProtocolStep[],
+  options: { maxConcurrency?: number } = {},
+): ProtocolStep[][] {
+  const cap =
+    options.maxConcurrency && options.maxConcurrency > 0
+      ? options.maxConcurrency
+      : Number.POSITIVE_INFINITY;
+  const remaining = Array.isArray(steps) ? [...steps] : [];
+  const produced = new Set<string>();
+  const waves: ProtocolStep[][] = [];
+
+  while (remaining.length > 0) {
+    const wave: ProtocolStep[] = [];
+    for (const step of remaining) {
+      if (wave.length >= cap) break;
+      if (!step.consumes.every((kind) => produced.has(kind))) break;
+      wave.push(step);
+    }
+    if (wave.length === 0) wave.push(remaining[0]!);
+    for (const step of wave) for (const kind of step.produces) produced.add(kind);
+    waves.push(wave);
+    remaining.splice(0, wave.length);
+  }
+  return waves;
 }
 
 function readStrings(value: unknown): string[] {
@@ -635,6 +698,29 @@ export class CastingDirector {
             message: `Actor "${actor.name}" challenges "${stance.opposes}" but runs before every target has produced.`,
             actors: [actor.name, ...targets.map((target) => target.name)],
           });
+        }
+      }
+    }
+
+    // One writer per file: two steps that may write overlapping paths must not
+    // be able to run in the same wave.
+    for (const wave of planWaves(cast.protocol.steps)) {
+      if (wave.length < 2) continue;
+      for (let i = 0; i < wave.length; i += 1) {
+        for (let j = i + 1; j < wave.length; j += 1) {
+          const left = wave[i]!;
+          const right = wave[j]!;
+          const overlap = (left.owns ?? []).some((a) =>
+            (right.owns ?? []).some((b) => globsOverlap(a, b)),
+          );
+          if (overlap) {
+            issues.push({
+              severity: "error",
+              code: "owns_conflict",
+              message: `Steps "${left.id}" and "${right.id}" may write overlapping paths but can run in the same wave.`,
+              actors: [left.actor, right.actor],
+            });
+          }
         }
       }
     }

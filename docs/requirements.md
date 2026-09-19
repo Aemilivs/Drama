@@ -219,6 +219,21 @@ Opt-in (`parallel: true`). Independent consecutive steps run in waves; a wave sh
 | R-PARALLEL-7 | A parallel run is as reproducible as a sequential one. | Two runs give the same turns and artifact kinds. |
 | R-PARALLEL-8 | An actor named like a prototype member runs its own executor. | A `constructor` actor succeeds instead of hitting `Object.prototype`. |
 
+## Guardrails — `test/requirements/guardrails.requirements.test.ts`
+
+Borrowed from the `/graph` task-graph runner, which already enforced them: a human gate on irreversible steps, one writer per file, spawn/concurrency caps, and a dry-run preview.
+
+| ID | Requirement (abstract) | Concrete example |
+| --- | --- | --- |
+| R-GUARD-1 | An approved gate lets the step run and is traced. | `approve: () => true` → done; a `gate` event with `approved: true`. |
+| R-GUARD-2 | With no approver the gate fails closed and nothing runs. | No `approve` → no turns, no artifacts, `gate` event `approved: false`. |
+| R-GUARD-3 | A denied optional gate is skipped and the rest continues. | The gated optional step is denied; an independent step still runs → done. |
+| R-GUARD-4 | An approver that throws counts as denied. | A throwing approver → no turns executed. |
+| R-GUARD-5 | Overlapping write globs in one wave are an error. | `src/**` + `src/lib/**` in one wave → `owns_conflict`; ordered by a dependency → clean. |
+| R-GUARD-6 | `maxConcurrency` caps how many steps share a wave. | Three independent steps, cap 2 → in-flight never exceeds 2. |
+| R-GUARD-7 | `maxTurns` stops the performance with a clear reason. | One turn, then `failed` with a reason containing "max turns". |
+| R-GUARD-8 | `planWaves` previews the schedule the stage will run. | `[[step-1, step-2], [step-3]]`; with cap 1, three waves. |
+
 ## Property — `test/requirements/properties.requirements.test.ts`
 
 Seeded (`mulberry32`) so any failure is reproducible from its case index.
@@ -255,6 +270,7 @@ Requirements are not just documentation — writing them surfaces bugs. So far:
 - **The live casting call surfaced a naming trap.** `dressCast` took `store` while `StageOptions` took `auditionStore`; passing the documented name silently used an empty store and re-auditioned (the example threw with a full cache). Both now use `auditionStore`. This is the kind of bug only an end-to-end run finds — the unit tests used the short name consistently and stayed green.
 - **Pre-merge review closed four robustness gaps.** The file store threw on a valid-JSON/wrong-shape file (now filters entries); the casting-call parser used a greedy `lastIndexOf("}")` and lost a valid answer followed by another object (now scans for the first balanced object); the selection knobs existed on `dressCast` but not through `StageManager` (now forwarded); and a `select` naming a non-candidate silently bound a different persona (now leaves the role uncast). Three smaller ones: out-of-batch answers are ignored, `unused_conflict_yield` no longer counts the stancer's own step, and a stance must run after *every* target with an inactive target flagged.
 - **The second review found three more.** Executor registries were read through the prototype chain, so an actor named `constructor` crashed the stage and one named `valueOf` silently ran the wrong function — lookups are now own-property only (R-PARALLEL-8, R-SERIAL-7). `unused_conflict_yield` still counted a *later* step by the stancer (R-CONFLICT-9). And the serialiser accepted a structurally broken payload and a future `formatVersion`, failing with a raw `TypeError` — it now validates the payload shape, rejects newer versions, and drops any executor smuggled into an already-parsed document (R-SERIAL-8/9).
+- **Borrowing `/graph`'s guardrails closed a hole the parallel feature had.** A wave could run two steps writing the same file; `owns` plus one-writer-per-wave validation now rejects that, and `planWaves` makes the schedule inspectable before it runs. The same source supplied the human gate (`gate: true`, failing closed) that Principle 9 required but the framework could not express.
 
 ## Adding a requirement
 
