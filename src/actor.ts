@@ -56,6 +56,11 @@ export interface Actor {
   /** Artifact kinds this actor is expected to produce. */
   expectedOutput: string[];
   exitCondition?: string;
+  /**
+   * The question this actor answers. A verifier must declare it, so that two
+   * verifiers asking the same thing are visible as copies.
+   */
+  question?: string;
   /** Designed disagreement: who this role challenges and what it should yield. */
   stance?: ActorStance;
   /** The persona playing this role, once an audition has bound one. */
@@ -143,6 +148,7 @@ export function createActor(
     interactionPermissions: partial.interactionPermissions?.slice() ?? [],
     expectedOutput: partial.expectedOutput?.slice() ?? [],
     exitCondition: partial.exitCondition,
+    question: partial.question,
     stance: partial.stance,
     binding: partial.binding,
     executor: partial.executor,
@@ -234,6 +240,10 @@ export function renderActorPrompt(ctx: ActorContext): ChatMessage[] {
   if (actor.interactionPermissions.length) {
     system.push(`Permissions: ${actor.interactionPermissions.join("; ")}`);
   }
+  if (actor.question) {
+    system.push(`Question to answer: ${actor.question}`);
+  }
+
   if (actor.stance) {
     const { opposes, toYield } = actor.stance;
     system.push(

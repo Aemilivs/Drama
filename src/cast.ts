@@ -60,7 +60,8 @@ export type CastIssueCode =
   | "stance_target_inactive"
   | "owns_conflict"
   | "independent_steps"
-  | "no_merge_owner";
+  | "no_merge_owner"
+  | "duplicate_question";
 
 export interface CastIssue {
   severity: "error" | "warning";
@@ -282,6 +283,8 @@ export interface ActorCard {
   expectedOutput?: string[] | string;
   produces?: string[] | string;
   exitCondition?: string;
+  /** The question this actor answers — a verifier should always declare one. */
+  question?: string;
   stance?: ActorStance;
 }
 
@@ -319,6 +322,7 @@ export function actorFromCard(card: ActorCard): Actor {
     interactionPermissions: readStrings(source.interactionPermissions),
     expectedOutput: readStrings(source.expectedOutput ?? source.produces),
     exitCondition: typeof source.exitCondition === "string" ? source.exitCondition : undefined,
+    question: typeof source.question === "string" ? source.question : undefined,
     stance: readStance(source.stance),
   });
 }
@@ -766,6 +770,30 @@ export class CastingDirector {
           ", ",
         )}); if the scene expects one result, add a step that consumes them.`,
         actors: [...terminalOwners.keys()],
+      });
+    }
+
+    // Judge panels: two actors answering the same question are copies, and a
+    // copy adds no conditional information ("Stopping and Routing LLM Judge
+    // Panels", arXiv:2608.19802). Distinct questions are complements.
+    const byQuestion = new Map<string, string[]>();
+    for (const actor of cast.actors) {
+      const question = typeof actor.question === "string" ? actor.question : "";
+      const key = question.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+      if (!key) continue;
+      const asking = byQuestion.get(key) ?? [];
+      asking.push(actor.name);
+      byQuestion.set(key, asking);
+    }
+    for (const asking of byQuestion.values()) {
+      if (asking.length < 2) continue;
+      issues.push({
+        severity: "warning",
+        code: "duplicate_question",
+        message: `Actors ${asking
+          .map((name) => `"${name}"`)
+          .join(", ")} ask the same question; copies add no conditional information — drop one, or give each a different question.`,
+        actors: asking,
       });
     }
 

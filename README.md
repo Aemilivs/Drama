@@ -4,7 +4,7 @@
 scene, cast the smallest troupe that can carry it, and let the result emerge from their
 interaction.
 
-`zero runtime dependencies` · `181 tests` · `TypeScript on Bun` · `MIT`
+`zero runtime dependencies` · `185 tests` · `TypeScript on Bun` · `MIT`
 
 ```text
 Traditional                          Scene-Casting
@@ -160,7 +160,7 @@ The difference is one actor whose local objective is to *falsify* the others.
 
 ```bash
 bun install          # dev types only (TypeScript, @types/bun, @opencode-ai/plugin)
-bun test             # 181 tests
+bun test             # 185 tests
 bun run example      # the end-to-end incident performance
 bun run typecheck    # tsc --noEmit
 ```

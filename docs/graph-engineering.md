@@ -38,13 +38,55 @@ serves auditions: a project tool cannot spawn a subagent, so the orchestrator do
 Wiring that obligation away is the difference between "the verifier is a different actor" and
 "the verifier is a different context". Both matter; only the second satisfies the doctrine.
 
+## What the judge-panel literature changes
+
+Two results are load-bearing here, and one of them is a warning against over-casting.
+
+**`arXiv:2608.19802` — *Stopping and Routing LLM Judge Panels* (WISE 2026, Zhu, Xie, Rao).** Panel
+design is framed as role-conditioned allocation: from a labelled audit set, declared slices and
+judge costs, each judge is classified relative to the target as a **copy** (adds no conditional
+information), a **complement** (improves the whole panel), or a **specialist** (helps only on a
+slice). The policy: drop copies, add complements globally, route specialists conditionally, stop
+when validation gain falls below a threshold.
+
+*Adopted:* the **copy / complement distinction**, because it is checkable without an audit set —
+two verifiers asking the same question are copies by construction. `Actor.question` makes the
+question declarable and `duplicate_question` reports copies (R-PANEL-1/2). This turns the
+"different questions" rule from prose into a check.
+
+*Not adopted:* the **gain-based stop rule and slice routing**, which both need data drama does not
+have — a labelled audit set, declared slices, per-judge costs. Without them, "stop when gain falls
+below a threshold" would be a number we invented. `planWaves`, `maxTurns` and `maxConcurrency`
+bound a panel's cost in the only honest way available here.
+
+**`arXiv:2609.14438` — *A latent dimension of Condorcet's jury theorem for multiple AI advisers*
+(Sasahara, Naito, Fujie).** Adding advisers makes **visible dissent** nearly inevitable. Reliability
+and dissent both approach certainty, at different rates, crossing at adviser accuracy **0.8**; below
+0.8, dissent becomes more likely than a correct majority before reliability does. An ideal panel can
+be right in aggregate and still look divided, so **disagreement alone is not aggregation failure**.
+The paper separates two decisions: how many advisers to consult, and how their verdicts are
+presented.
+
+*Adopted:* the **interpretation rule** — dissent is expected, not an error — and the consequent
+reason to keep panels small and questions distinct. drama never treats disagreement as failure:
+`stance` exists to produce it, and no validator complains that actors disagree. That is exactly why
+`duplicate_question` removes *copies* while nothing complains about *distinct* questions producing
+different answers. *Presentation* is the paper's second decision, and the trace serves it: every
+verifier's turn and artifact stay separate, so a divided panel is visible rather than averaged into
+one number.
+
+*Not adopted:* a **panel-size threshold**. The 0.8 crossing is about individual accuracy, not a
+headcount, and drama has no per-verifier accuracy to plug in. Inventing "at most N verifiers" from
+it would be pseudo-science.
+
 ## Encoding rules in a cast
 
 - Express a dependency as `consumes`, never as a step order.
 - If two steps never read each other, let them be a wave — do not serialize them "for clarity".
 - Declare `owns` for anything that writes; overlapping globs must be separated by a real edge.
 - Gate what cannot be undone, and only that.
-- Cast several verifiers with different questions when robustness is a success criterion.
+- Cast several verifiers with different questions when robustness is a success criterion — and declare each one as `question`, so copies are visible.
+- Prefer a deterministic verifier — tests, a compiler, a query — over a model.
 
 ## Nesting drama inside `/graph` (or any other orchestrator)
 

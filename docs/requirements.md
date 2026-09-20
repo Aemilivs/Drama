@@ -207,6 +207,17 @@ A `Performance` is pure data and round-trips exactly, except for `Actor.executor
 | R-SERIAL-8 | A broken payload or a newer version is rejected clearly. | `{}` payload → "missing"; `formatVersion: 999` → "newer than supported". |
 | R-SERIAL-9 | An already-parsed document cannot smuggle a function. | A hand-set `executor` on the payload is dropped. |
 
+## Judge panels — `test/requirements/panel.requirements.test.ts`
+
+Adapted from *Stopping and Routing LLM Judge Panels* (`arXiv:2608.19802`) and *A latent dimension of Condorcet's jury theorem for multiple AI advisers* (`arXiv:2609.14438`). We adopt only what is checkable without a labelled audit set; see `docs/graph-engineering.md` for what was deliberately not adopted.
+
+| ID | Requirement (abstract) | Concrete example |
+| --- | --- | --- |
+| R-PANEL-1 | Two actors asking the same question are reported as copies. | Same question with different casing and punctuation → `duplicate_question`. |
+| R-PANEL-2 | Distinct questions, a lone verifier, and undeclared questions are silent. | Three different questions → clean; no `question` declared → nothing to compare. |
+| R-PANEL-3 | The declared question reaches the actor prompt. | "Question to answer: …" appears in the system message; absent when undeclared. |
+| R-PANEL-4 | The question survives the cast card. | `castFromCard` round-trips `question`. |
+
 ## Parallel steps — `test/requirements/parallel.requirements.test.ts`
 
 Opt-in (`parallel: true`). Independent consecutive steps run in waves; a wave shares one history snapshot, and turns, artifacts and events are still recorded in declaration order. Off by default, where the cap is one step per wave and behaviour is identical to a simple loop.
