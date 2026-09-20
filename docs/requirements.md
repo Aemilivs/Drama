@@ -121,6 +121,9 @@ An OpenCode agent is a persona: its description is a delegation trigger, its bod
 | R-OCAGENT-6 | A whole agents directory becomes a roster. | Two definitions → two personas with `source: opencode-agent`. |
 | R-OCAGENT-7 | Quotes are only stripped when they wrap the whole value. | An unquoted trailing apostrophe survives; a fully quoted scalar is unquoted. |
 | R-OCAGENT-8 | Leading blank lines and key case do not defeat the parser. | Blank lines before `---` still parse; `Description:`/`Mode:` are read. |
+| R-OCAGENT-9 | A disabled agent is never a performer. | `disable: true` is dropped by default; `excludeDisabled: false` keeps it. |
+| R-OCAGENT-10 | Primary agents are kept unless the caller excludes them. | `mode: primary` survives by default and is dropped with `excludePrimary`. |
+| R-OCAGENT-11 | The orchestrator can be excluded by id. | `exclude: ["Vetinari"]` leaves only real performers. |
 
 ## Designed conflict — `test/requirements/conflict.requirements.test.ts`
 

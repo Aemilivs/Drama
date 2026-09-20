@@ -145,7 +145,7 @@ export {
   dressCast,
 } from "./persona";
 
-export type { OpencodeAgentCard, PersonaFromAgentOptions } from "./opencode";
+export type { OpencodeAgentCard, PersonaFromAgentOptions, PersonaRosterOptions } from "./opencode";
 export {
   parseOpencodeAgent,
   personaFromOpencodeAgent,

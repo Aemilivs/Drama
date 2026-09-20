@@ -140,6 +140,8 @@ Auditions and cache hits are recorded, so a casting decision can always be expla
 
 - **Core:** `src/persona.ts` (`Persona`, `Audition`, `Auditioner`, `AuditionStore`, `roleFingerprint`, `dressCast`, in-memory store) and `src/opencode.ts` (agent markdown → `Persona`). Pure, dependency-free, testable.
 - **Host (`.opencode/`):** the casting call the orchestrator performs — `renderCastingCall` / `parseAuditionAnswer` (`.opencode/lib/audition-prompt.ts`) plus a persistent `AuditionStore` (`.opencode/lib/audition-store.ts`). A project tool cannot spawn a subagent, so the spawn itself belongs to the orchestrating agent; `examples/audition/run.ts` records a real run against Vimes, Feegle and Librarian.
+
+The **pool is not the cast**: `personasFromOpencodeAgents` drops `disable: true` agents by default, and can drop `mode: primary` agents and named ids — so the orchestrator never casts itself. See the nesting rules in `docs/graph-engineering.md`.
 - **Stage:** `StageManager` dresses a cast when given `personas` + `auditioner`, and folds audition events into the performance trace.
 
 ## Open question

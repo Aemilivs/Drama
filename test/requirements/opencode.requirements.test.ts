@@ -133,4 +133,45 @@ describe("OpenCode agent adapter requirements", () => {
     expect(roster[1]!.name).toBe("Librarian");
     expect(roster[1]!.source).toEqual({ kind: "opencode-agent", ref: "librarian" });
   });
+
+  test("R-OCAGENT-9 a disabled agent is never a performer", () => {
+    const disabled = "---\ndescription: Turned off.\ndisable: true\n---\n\nbody";
+    const roster = personasFromOpencodeAgents([
+      { id: "Vimes", markdown: VIMES },
+      { id: "build", markdown: disabled },
+    ]);
+    expect(roster.map((persona) => persona.id)).toEqual(["Vimes"]);
+
+    const kept = personasFromOpencodeAgents([{ id: "build", markdown: disabled }], {
+      excludeDisabled: false,
+    });
+    expect(kept.map((persona) => persona.id)).toEqual(["build"]);
+  });
+
+  test("R-OCAGENT-10 primary agents are kept unless the caller excludes them", () => {
+    const primary = "---\ndescription: Entry point.\nmode: primary\n---\n\nbody";
+    const agents = [
+      { id: "Vimes", markdown: VIMES },
+      { id: "Vetinari", markdown: primary },
+    ];
+    expect(personasFromOpencodeAgents(agents).map((persona) => persona.id)).toEqual([
+      "Vimes",
+      "Vetinari",
+    ]);
+    expect(
+      personasFromOpencodeAgents(agents, { excludePrimary: true }).map((persona) => persona.id),
+    ).toEqual(["Vimes"]);
+  });
+
+  test("R-OCAGENT-11 the orchestrator can be excluded by id", () => {
+    const primary = "---\ndescription: Entry point.\nmode: primary\n---\n\nbody";
+    const roster = personasFromOpencodeAgents(
+      [
+        { id: "Vimes", markdown: VIMES },
+        { id: "Vetinari", markdown: primary },
+      ],
+      { exclude: ["Vetinari"], excludePrimary: true },
+    );
+    expect(roster.map((persona) => persona.id)).toEqual(["Vimes"]);
+  });
 });

@@ -140,15 +140,50 @@ export function personaFromOpencodeAgent(
   });
 }
 
-/** Turn a set of agent definitions into a roster. */
+/** How a roster is filtered down to performers. */
+export interface PersonaRosterOptions {
+  /** Ids that must never be cast — e.g. the orchestrating agent itself. */
+  exclude?: string[];
+  /** Skip agents whose frontmatter `mode` is `primary`. Default: false. */
+  excludePrimary?: boolean;
+  /** Skip agents whose frontmatter `disable` is truthy. Default: true. */
+  excludeDisabled?: boolean;
+}
+
+function isTruthyFlag(value: string | undefined): boolean {
+  if (typeof value !== "string") return false;
+  return ["true", "yes", "1"].includes(value.trim().toLowerCase());
+}
+
+/**
+ * Turn a set of agent definitions into a roster of *performers*.
+ *
+ * The pool and the cast are different things: an agent that OpenCode will not
+ * run (`disable: true`) is never a performer, and a primary agent is the user's
+ * entry point rather than a cast member. The orchestrating agent must be
+ * excluded by id — casting it would spawn the director as an actor.
+ */
 export function personasFromOpencodeAgents(
   agents: { id: string; markdown: string; name?: string; archetype?: string }[],
+  options: PersonaRosterOptions = {},
 ): Persona[] {
-  return agents.map((agent) =>
-    personaFromOpencodeAgent(agent.markdown, {
-      id: agent.id,
-      name: agent.name,
-      archetype: agent.archetype,
-    }),
-  );
+  const excluded = new Set(options.exclude ?? []);
+  const excludePrimary = options.excludePrimary === true;
+  const excludeDisabled = options.excludeDisabled !== false;
+
+  return agents
+    .filter((agent) => {
+      if (excluded.has(agent.id)) return false;
+      const card = parseOpencodeAgent(agent.markdown, { id: agent.id });
+      if (excludeDisabled && isTruthyFlag(card.fields.disable)) return false;
+      if (excludePrimary && (card.mode ?? "").trim().toLowerCase() === "primary") return false;
+      return true;
+    })
+    .map((agent) =>
+      personaFromOpencodeAgent(agent.markdown, {
+        id: agent.id,
+        name: agent.name,
+        archetype: agent.archetype,
+      }),
+    );
 }

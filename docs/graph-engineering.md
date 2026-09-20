@@ -45,3 +45,21 @@ Wiring that obligation away is the difference between "the verifier is a differe
 - Declare `owns` for anything that writes; overlapping globs must be separated by a real edge.
 - Gate what cannot be undone, and only that.
 - Cast several verifiers with different questions when robustness is a success criterion.
+
+## Nesting drama inside `/graph` (or any other orchestrator)
+
+Two orchestration layers over one performer pool do not conflict if they are strictly nested and
+each level owns exactly one thing.
+
+| Rule | Why |
+| --- | --- |
+| **One orchestrator per level** | Two directors for one scene means two routing truths. `/graph` decides order *between* jobs; drama decides order *within* one job. Never mirror the same dependency in both. |
+| **Depth ≤ 1** | `subagent_depth` caps nesting. A graph node runs at depth 1, so a scene inside it may spawn actors at depth 2 — and no further. |
+| **The outer layer owns the budget** | `caps.maxAgents` / `caps.maxConcurrency` must bound drama's `maxAuditions` / `maxTurns` / `maxConcurrency`. The inner cap is strictly smaller and derived from the outer, or the binding cap is a surprise. |
+| **One gate, at the outermost expensive edge** | A `gate: true` in a node *and* in a step asks the human twice for one irreversible action. Place the gate where a mistake is expensive to undo. |
+| **The outer layer owns the merge** | drama merges inside its own scene; the job-level result is merged by whoever owns the graph. |
+| **The roster is not the pool** | Exclude the orchestrating agent, `mode: primary` agents and `disable: true` agents from the cast — otherwise the director spawns itself. See `personasFromOpencodeAgents`. |
+
+**drama's persona layer is an adapter onto the native agent system, not a rival to it.** An
+OpenCode agent is a performer; drama is the director of one scene; `/graph` is the producer of the
+whole job. One director per level, and the conflict disappears.
