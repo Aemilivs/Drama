@@ -115,6 +115,10 @@ library whose value is having no runtime dependencies. Those five ship 34 to 190
 days. Where a deeper integration is genuinely wanted — an engine's durable checkpoints *under* a
 performance — that is a specific project with a concrete requirement, not five "supported engines".
 
+**Provider adapters follow the same rule.** `examples/providers/` carries a plain-`fetch`
+OpenAI-compatible adapter and an Anthropic Messages adapter — both tested, and both deliberately
+outside `src/`. The library ships no provider code, so the BYO-client row above stays true.
+
 ## Coding harnesses and low-code platforms are a different category
 
 By raw stars the biggest names are applications, not orchestration libraries: `sst/opencode`

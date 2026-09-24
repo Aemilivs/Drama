@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
+import { runLlmExample } from "../../examples/llm/run.ts";
 import {
   chatFromEnv,
   createOpenAiCompatibleChat,
-  runLlmExample,
-} from "../../examples/llm/run.ts";
+} from "../../examples/providers/openai-compatible.ts";
 
 function fakeFetch(content = "hi") {
   const calls: { url: string; init?: RequestInit }[] = [];

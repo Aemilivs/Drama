@@ -230,6 +230,18 @@ The integration surface with any agent framework is one executor factory. These 
 | R-ENGINE-4 | An engine-backed actor drives a real performance. | one engine actor → `done`, one turn, one artifact. |
 | R-ENGINE-5 | The producer can be named after the engine. | `producer: "langgraph"` → `producedBy: "langgraph"`. |
 
+## Provider adapters — `test/requirements/providers.requirements.test.ts`
+
+Provider adapters live in `examples/providers/`, not in the library: drama carries no provider code, and these are recipes proven by tests.
+
+| ID | Requirement (abstract) | Concrete example |
+| --- | --- | --- |
+| R-ANTHROPIC-1 | The request is a Messages call, with the system prompt lifted out of `messages`. | `POST /v1/messages`, `anthropic-version`, Bearer auth, `max_tokens`, top-level `system`, only user/assistant turns. |
+| R-ANTHROPIC-2 | Only text blocks become the answer. | Thinking blocks ignored; two text blocks concatenated; a thinking-only reply is an error. |
+| R-ANTHROPIC-3 | A non-2xx surfaces the documented error shape. | `401` + `{ error: { type, message } }` → `"authentication_error: invalid x-api-key"`. |
+| R-ANTHROPIC-4 | `max_tokens` is configurable, and the environment needs a key and a model. | `maxTokens: 123` reaches the body; a partial env yields `undefined`. |
+| R-ANTHROPIC-5 | A Claude-backed actor drives a real performance. | fake fetch → `done`, artifact content `"42"`. |
+
 ## Parallel steps — `test/requirements/parallel.requirements.test.ts`
 
 Opt-in (`parallel: true`). Independent consecutive steps run in waves; a wave shares one history snapshot, and turns, artifacts and events are still recorded in declaration order. Off by default, where the cap is one step per wave and behaviour is identical to a simple loop.

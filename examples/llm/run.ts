@@ -1,10 +1,10 @@
 /**
  * A runnable LLM-backed example.
  *
- * Proves the whole chain with a real model: personas are irrelevant here, but
- * `createLlmExecutor` + `StageManager` are the production path. The adapter is a
- * plain OpenAI-compatible chat call over `fetch` — no provider SDK, no
- * dependency — and it is configured entirely from the environment.
+ * Proves the whole chain with a real model: `createLlmExecutor` + `StageManager`
+ * are the production path. The adapter itself is an OpenAI-compatible chat call
+ * over `fetch` — no provider SDK, no dependency — and lives in
+ * `examples/providers/openai-compatible.ts`, next to the Anthropic one.
  *
  * Offline-safe by design: with no configuration the example prints how to set it
  * up and exits; the test suite injects a fake `fetch` and never touches a network.
@@ -13,6 +13,11 @@
  *   DRAMA_LLM_API_KEY=... \
  *   DRAMA_LLM_MODEL=some-model \
  *   bun run examples/llm/run.ts
+ *
+ * For Claude, use `examples/providers/anthropic.ts`:
+ *
+ *   ANTHROPIC_API_KEY=... ANTHROPIC_MODEL=claude-opus-5-5 \
+ *   bun run examples/anthropic/run.ts
  */
 
 import {
@@ -26,57 +31,8 @@ import {
   formatPerformance,
   sceneFromCard,
 } from "../../src/index.ts";
-import type { ChatFn, ChatMessage, Performance } from "../../src/index.ts";
-
-export interface OpenAiCompatibleConfig {
-  baseUrl: string;
-  apiKey: string;
-  model: string;
-  /** Injectable for tests; defaults to the global `fetch`. */
-  fetch?: typeof fetch;
-}
-
-interface ChatCompletionResponse {
-  choices?: { message?: { content?: string } }[];
-}
-
-/** Wrap an OpenAI-compatible `/chat/completions` endpoint as a `ChatFn`. */
-export function createOpenAiCompatibleChat(
-  config: OpenAiCompatibleConfig,
-): (messages: ChatMessage[]) => Promise<string> {
-  const doFetch = config.fetch ?? fetch;
-  const url = `${config.baseUrl.replace(/\/+$/, "")}/chat/completions`;
-  return async (messages: ChatMessage[]) => {
-    const response = await doFetch(url, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        authorization: `Bearer ${config.apiKey}`,
-      },
-      body: JSON.stringify({ model: config.model, messages }),
-    });
-    if (!response.ok) {
-      throw new Error(`chat request failed: ${response.status} ${response.statusText}`);
-    }
-    const data = (await response.json()) as ChatCompletionResponse;
-    const content = data.choices?.[0]?.message?.content;
-    if (typeof content !== "string") throw new Error("chat response had no message content");
-    return content;
-  };
-}
-
-export interface LlmEnv {
-  DRAMA_LLM_BASE_URL?: string;
-  DRAMA_LLM_API_KEY?: string;
-  DRAMA_LLM_MODEL?: string;
-}
-
-/** Build a `ChatFn` from the environment, or `undefined` when it is incomplete. */
-export function chatFromEnv(env: LlmEnv = process.env as LlmEnv): ChatFn | undefined {
-  const { DRAMA_LLM_BASE_URL: baseUrl, DRAMA_LLM_API_KEY: apiKey, DRAMA_LLM_MODEL: model } = env;
-  if (!baseUrl || !apiKey || !model) return undefined;
-  return createOpenAiCompatibleChat({ baseUrl, apiKey, model });
-}
+import type { ChatFn, Performance } from "../../src/index.ts";
+import { chatFromEnv } from "../providers/openai-compatible.ts";
 
 /** One actor, one step: the smallest production that exercises the LLM path. */
 export async function runLlmExample(chat: ChatFn): Promise<Performance> {

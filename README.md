@@ -4,7 +4,7 @@
 scene, cast the smallest troupe that can carry it, and let the result emerge from their
 interaction.
 
-`zero runtime dependencies` · `185 tests` · `TypeScript on Bun` · `MIT`
+`zero runtime dependencies` · `195 tests` · `TypeScript on Bun` · `MIT`
 
 ```text
 Traditional                          Scene-Casting
@@ -160,7 +160,7 @@ The difference is one actor whose local objective is to *falsify* the others.
 
 ```bash
 bun install          # dev types only (TypeScript, @types/bun, @opencode-ai/plugin)
-bun test             # 185 tests
+bun test             # 195 tests
 bun run example      # the end-to-end incident performance
 bun run typecheck    # tsc --noEmit
 ```
@@ -172,6 +172,7 @@ Three runnable examples, all offline by default:
 | [`examples/incident-rca/run.ts`](examples/incident-rca/run.ts) | single answer vs cast, on a real-feeling incident |
 | [`examples/audition/run.ts`](examples/audition/run.ts) | a recorded casting call against three real agents |
 | [`examples/llm/run.ts`](examples/llm/run.ts) | the production LLM path (self-explains when unconfigured) |
+| [`examples/anthropic/run.ts`](examples/anthropic/run.ts) | the same production, on Claude |
 
 ### Use it as a library
 
@@ -246,15 +247,17 @@ const researcher = functionActor({
 });
 ```
 
-A complete OpenAI-compatible adapter over `fetch` — no SDK, configured entirely from the
-environment, and offline-safe with no config — is in [`examples/llm/run.ts`](examples/llm/run.ts):
+Provider adapters are plain `fetch` with no dependency, and live in [`examples/providers/`](examples/providers):
 
-```bash
-DRAMA_LLM_BASE_URL=https://api.example.com/v1 \
-DRAMA_LLM_API_KEY=... \
-DRAMA_LLM_MODEL=some-model \
-bun run examples/llm/run.ts
-```
+| Adapter | File | Run it |
+| --- | --- | --- |
+| OpenAI-compatible | [`openai-compatible.ts`](examples/providers/openai-compatible.ts) | `DRAMA_LLM_BASE_URL=… DRAMA_LLM_API_KEY=… DRAMA_LLM_MODEL=… bun run examples/llm/run.ts` |
+| Anthropic (Claude) | [`anthropic.ts`](examples/providers/anthropic.ts) | `ANTHROPIC_API_KEY=… ANTHROPIC_MODEL=claude-opus-5-5 bun run examples/anthropic/run.ts` |
+
+**Claude is not OpenAI-compatible.** The endpoint, the auth header, the required `max_tokens` and
+the placement of the system prompt (a top-level parameter — there is no `"system"` role inside
+`messages`) all differ, which is why it gets its own adapter. Both are recipes to copy, not code the
+library carries: drama still ships no provider integrations of its own.
 
 ### Bring your own engine
 
@@ -313,7 +316,7 @@ src/
   trace.ts       formatPerformance, performanceTimeline
   index.ts       public surface
 .opencode/       skills, project tool, audition libraries
-examples/        incident-rca · audition · llm
+examples/        incident-rca · audition · llm · anthropic · providers
 test/            behavioural tests and formalized requirements
 docs/            architecture · actors · engines · graph-engineering · prior-art · requirements · ROADMAP
 ```
