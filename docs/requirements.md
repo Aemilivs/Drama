@@ -218,6 +218,18 @@ Adapted from *Stopping and Routing LLM Judge Panels* (`arXiv:2608.19802`) and *A
 | R-PANEL-3 | The declared question reaches the actor prompt. | "Question to answer: …" appears in the system message; absent when undeclared. |
 | R-PANEL-4 | The question survives the cast card. | `castFromCard` round-trips `question`. |
 
+## Engine adapters — `test/requirements/engines.requirements.test.ts`
+
+The integration surface with any agent framework is one executor factory. These requirements fix its contract; `docs/engines.md` holds the recipes.
+
+| ID | Requirement (abstract) | Concrete example |
+| --- | --- | --- |
+| R-ENGINE-1 | An engine result becomes artifacts, and the engine gets the real prompt. | `{ artifacts: [{ kind, content }] }` → `ok`; the request carries the task, the question and the inputs. |
+| R-ENGINE-2 | A throwing engine fails the actor instead of the stage. | `throw` → `failed` with the message preserved. |
+| R-ENGINE-3 | A malformed or empty result is a failure, and garbage entries are dropped. | `undefined` / `{ artifacts: [] }` → failed; `[null, {}, { kind: "" }]` filtered out. |
+| R-ENGINE-4 | An engine-backed actor drives a real performance. | one engine actor → `done`, one turn, one artifact. |
+| R-ENGINE-5 | The producer can be named after the engine. | `producer: "langgraph"` → `producedBy: "langgraph"`. |
+
 ## Parallel steps — `test/requirements/parallel.requirements.test.ts`
 
 Opt-in (`parallel: true`). Independent consecutive steps run in waves; a wave shares one history snapshot, and turns, artifacts and events are still recorded in declaration order. Off by default, where the cap is one step per wave and behaviour is identical to a simple loop.

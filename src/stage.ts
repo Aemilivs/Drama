@@ -7,7 +7,7 @@
  */
 
 import type { Artifact, Diagnosis, RecommendedAction, Status } from "./types";
-import { nextId, ownEntry } from "./types";
+import { messageOf, nextId, ownEntry } from "./types";
 import type { Scene, SceneAnalysis, SceneDesignInput } from "./scene";
 import { SceneDesigner } from "./scene";
 import type {
@@ -133,10 +133,6 @@ export interface StageManagerOptions extends StageOptions {
   maxRecasts?: number;
   maxRedesigns?: number;
   clock?: () => number;
-}
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 /** Artifact inputs are explicit: an empty `consumes` means no inputs. */

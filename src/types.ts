@@ -107,6 +107,11 @@ export function ownEntry<T>(
   return Object.prototype.hasOwnProperty.call(record, key) ? record[key] : undefined;
 }
 
+/** One place for turning a thrown value into the message the trace will show. */
+export function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 export function nextId(prefix: string): string {
   idCounter += 1;
   return `${prefix}-${idCounter}`;

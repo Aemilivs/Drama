@@ -89,6 +89,14 @@ export {
   planWaves,
 } from "./cast";
 
+export { createEngineExecutor } from "./engines";
+export type {
+  EngineRequest,
+  EngineResult,
+  EngineExecutorOptions,
+  DeclaredArtifact,
+} from "./engines";
+
 export type {
   Evaluation,
   EvaluationContext,

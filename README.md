@@ -256,6 +256,13 @@ DRAMA_LLM_MODEL=some-model \
 bun run examples/llm/run.ts
 ```
 
+### Bring your own engine
+
+An actor needs one thing — an `executor` — so **no framework is specially supported and all of
+them work**. `createEngineExecutor` is the whole integration surface: the engine gets exactly the
+prompt a model would get, and returns artifact kinds. Recipes for LangGraph, the OpenAI Agents SDK,
+Google ADK, CrewAI and Mastra: [`docs/engines.md`](docs/engines.md).
+
 ### Use it from OpenCode
 
 Copy (or symlink) the `.opencode/` directory into a project and the same loop is available to an
@@ -308,7 +315,7 @@ src/
 .opencode/       skills, project tool, audition libraries
 examples/        incident-rca · audition · llm
 test/            behavioural tests and formalized requirements
-docs/            architecture · actors · graph-engineering · requirements · ROADMAP
+docs/            architecture · actors · engines · graph-engineering · prior-art · requirements · ROADMAP
 ```
 
 ### Testing
@@ -349,6 +356,8 @@ accepted broken shapes, and a fake edge in the flagship example.
 - [`docs/architecture.md`](docs/architecture.md) — module map, dependency direction, data flow.
 - [`docs/actors.md`](docs/actors.md) — roles vs personas, the casting call, the refusal cache.
 - [`docs/graph-engineering.md`](docs/graph-engineering.md) — how drama maps to the task-graph discipline.
+- [`docs/engines.md`](docs/engines.md) — using LangGraph, the OpenAI Agents SDK, Google ADK, CrewAI or Mastra as an actor.
+- [`docs/prior-art.md`](docs/prior-art.md) — the five most-used frameworks, compared, and why there are no native adapters.
 - [`docs/requirements.md`](docs/requirements.md) — the requirement matrix and its findings log.
 - [`docs/ROADMAP.md`](docs/ROADMAP.md) — what is done, and what is deliberately out of scope.
 
