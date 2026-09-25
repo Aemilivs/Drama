@@ -150,7 +150,7 @@ Wrapping an engine gives you **one actor**. It does not import that engine's dur
 memory or retries into drama, and drama will not pretend the semantics compose:
 
 - **Durability** — LangGraph checkpoints per super-step, CrewAI forks task outputs, Mastra snapshots
-  workflows. drama's `gate` / `maxTurns` / `enqueue` semantics are its own; a wrapped engine's
+  workflows. drama's `gate` / `owns` / `maxTurns` / `maxConcurrency` semantics are its own; a wrapped engine's
   checkpoints do not resume a drama performance.
 - **Streaming** — executors return a complete output. An engine that streams internally may still be
   wrapped; drama just sees the final result.
