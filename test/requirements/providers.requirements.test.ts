@@ -269,4 +269,43 @@ describe("Anthropic adapter requirements", () => {
     const other = writeAuth({ openai: { type: "api", key: "openai-key" } });
     expect(opencodeCredential("anthropic", { authPath: other })).toBeUndefined();
   });
+
+  test("R-ANTHROPIC-10 the Claude Code token is the last resort, never the first", () => {
+    const store = writeAuth({ anthropic: { type: "api", key: "host-key" } });
+    const model = { ANTHROPIC_MODEL: "m" };
+
+    // `claude setup-token` output is accepted, and reported as its own source.
+    const token = resolveAnthropicAuth(
+      { ...model, CLAUDE_CODE_OAUTH_TOKEN: "oauth-1y" },
+      { authPath: NO_STORE },
+    );
+    expect(token.source).toBe("claude-code-token");
+    expect(token.authToken).toBe("oauth-1y");
+    expect(
+      anthropicFromEnv({ ...model, CLAUDE_CODE_OAUTH_TOKEN: "oauth-1y" }, { authPath: NO_STORE }),
+    ).toBeFunction();
+
+    // A bearer token beats an API key, matching the host CLI's own precedence.
+    const both = resolveAnthropicAuth(
+      { ...model, ANTHROPIC_AUTH_TOKEN: "bearer", ANTHROPIC_API_KEY: "key" },
+      { authPath: NO_STORE },
+    );
+    expect(both.authToken).toBe("bearer");
+    expect(both.apiKey).toBeUndefined();
+
+    // Anything designed for programmatic use wins over a subscription token.
+    const overKey = resolveAnthropicAuth(
+      { ...model, CLAUDE_CODE_OAUTH_TOKEN: "oauth-1y", ANTHROPIC_API_KEY: "key" },
+      { authPath: NO_STORE },
+    );
+    expect(overKey.source).toBe("env");
+    expect(overKey.apiKey).toBe("key");
+
+    const overStore = resolveAnthropicAuth(
+      { ...model, CLAUDE_CODE_OAUTH_TOKEN: "oauth-1y" },
+      { authPath: store },
+    );
+    expect(overStore.source).toBe("opencode-auth");
+    expect(overStore.apiKey).toBe("host-key");
+  });
 });

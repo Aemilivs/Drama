@@ -28,6 +28,24 @@
  * store is read read-only and best-effort: a missing or malformed file is simply
  * "no credential", never an error. No credential value is ever logged, copied or
  * written anywhere.
+ *
+ * ## What this adapter deliberately does NOT read
+ *
+ * **Claude Code's own credential is not read**, even though Anthropic documents
+ * where it lives (macOS Keychain, falling back to `~/.claude/.credentials.json`;
+ * that file under Linux and Windows; `CLAUDE_CONFIG_DIR` honoured). The reason is
+ * the policy, not the undocumented file format:
+ *
+ *   "Anthropic does not permit third-party developers to offer Claude.ai login
+ *    into their own applications, or to route requests through Free, Pro, or Max
+ *    plan credentials on behalf of their users. Moreover, developers may not
+ *    collect, store, or intermediate Claude.ai credentials or session tokens."
+ *   — code.claude.com/docs/en/legal-and-compliance#authentication-and-credential-use
+ *
+ * The documented path for your *own* headless runs is `claude setup-token`, which
+ * yields a one-year token you export as `CLAUDE_CODE_OAUTH_TOKEN`; that is
+ * supported here as the last resort. Everything else should be a Console API key
+ * or a supported cloud-provider credential.
  */
 
 import { readFileSync } from "node:fs";
@@ -84,7 +102,7 @@ async function readError(response: Response): Promise<string> {
 }
 
 /** Where a credential came from — never the credential itself. */
-export type AnthropicAuthSource = "env" | "opencode-auth" | "none";
+export type AnthropicAuthSource = "env" | "opencode-auth" | "claude-code-token" | "none";
 
 export interface AnthropicAuth {
   apiKey?: string;
@@ -151,13 +169,21 @@ export function resolveAnthropicAuth(
   const maxTokens = Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
   const common = { baseUrl, maxTokens };
 
-  if (env.ANTHROPIC_API_KEY) return { ...common, apiKey: env.ANTHROPIC_API_KEY, source: "env" };
+  // Precedence mirrors the host CLI's own, so a machine configured for either
+  // behaves the same here: bearer token, then API key, then stored credentials.
   if (env.ANTHROPIC_AUTH_TOKEN) {
     return { ...common, authToken: env.ANTHROPIC_AUTH_TOKEN, source: "env" };
   }
+  if (env.ANTHROPIC_API_KEY) return { ...common, apiKey: env.ANTHROPIC_API_KEY, source: "env" };
 
   const host = opencodeCredential("anthropic", { authPath: options.authPath, env });
   if (host) return { ...common, ...host, source: "opencode-auth" };
+
+  // `claude setup-token` output: documented for your own scripts, so it comes last —
+  // anything designed for programmatic use wins over a subscription token.
+  if (env.CLAUDE_CODE_OAUTH_TOKEN) {
+    return { ...common, authToken: env.CLAUDE_CODE_OAUTH_TOKEN, source: "claude-code-token" };
+  }
 
   return { ...common, source: "none" };
 }
@@ -224,6 +250,8 @@ export interface AnthropicEnv {
   ANTHROPIC_MODEL?: string;
   ANTHROPIC_MAX_TOKENS?: string;
   ANTHROPIC_BASE_URL?: string;
+  /** From `claude setup-token`; documented for your own headless runs. */
+  CLAUDE_CODE_OAUTH_TOKEN?: string;
   [OPENCODE_AUTH_PATH_ENV]?: string;
   [key: string]: string | undefined;
 }

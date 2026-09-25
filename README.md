@@ -4,7 +4,7 @@
 scene, cast the smallest troupe that can carry it, and let the result emerge from their
 interaction.
 
-`zero runtime dependencies` · `199 tests` · `TypeScript on Bun` · `MIT`
+`zero runtime dependencies` · `200 tests` · `TypeScript on Bun` · `MIT`
 
 ```text
 Traditional                          Scene-Casting
@@ -160,7 +160,7 @@ The difference is one actor whose local objective is to *falsify* the others.
 
 ```bash
 bun install          # dev types only (TypeScript, @types/bun, @opencode-ai/plugin)
-bun test             # 199 tests
+bun test             # 200 tests
 bun run example      # the end-to-end incident performance
 bun run typecheck    # tsc --noEmit
 ```
@@ -258,19 +258,34 @@ Provider adapters are plain `fetch` with no dependency, and live in [`examples/p
 the placement of the system prompt (a top-level parameter — there is no `"system"` role inside
 `messages`) all differ, which is why it gets its own adapter.
 
-**Credentials are reused, not demanded.** The adapter takes `ANTHROPIC_API_KEY` or
-`ANTHROPIC_AUTH_TOKEN` if you set one, and otherwise reads the credential the *host* already has —
-the `anthropic` entry that `opencode auth login` writes to `~/.local/share/opencode/auth.json`. So
-connecting Anthropic to the host once is enough, and this needs no configuration of its own:
+**Credentials are reused, not demanded.** The order mirrors Anthropic's own CLI precedence, so a
+machine configured either way behaves the same here:
+
+| # | Source | Set by |
+| --- | --- | --- |
+| 1 | `ANTHROPIC_AUTH_TOKEN` | you — a bearer token for a gateway |
+| 2 | `ANTHROPIC_API_KEY` | you — a Console API key |
+| 3 | the host's `anthropic` entry | `opencode auth login` → `~/.local/share/opencode/auth.json` |
+| 4 | `CLAUDE_CODE_OAUTH_TOKEN` | `claude setup-token` — documented for your own headless runs |
+
+So connecting Anthropic to the host once is enough:
 
 ```bash
 ANTHROPIC_MODEL=claude-opus-5-5 bun run examples/anthropic/run.ts
 # credential: opencode-auth · model: claude-opus-5-5
 ```
 
-The store is read **read-only and best-effort**: a missing or malformed file means "no credential",
-never an error, and no credential value is logged, copied or written anywhere. `ANTHROPIC_BASE_URL`
-and `ANTHROPIC_MAX_TOKENS` are also honoured.
+`ANTHROPIC_BASE_URL` and `ANTHROPIC_MAX_TOKENS` are honoured too. The store is read **read-only and
+best-effort**: a missing or malformed file means "no credential", never an error, and no credential
+value is logged, copied or written anywhere.
+
+**Claude Code's own credential is deliberately not read** — not the Keychain item, not
+`~/.claude/.credentials.json` — even though Anthropic documents where it lives. The docs are explicit
+that developers *"may not collect, store, or intermediate Claude.ai credentials or session tokens"*,
+nor *"route requests through Free, Pro, or Max plan credentials on behalf of their users"*
+([legal & compliance](https://code.claude.com/docs/en/legal-and-compliance#authentication-and-credential-use)).
+The documented path for your own automation is `claude setup-token` (row 4); everything else should be
+an API key or a supported cloud-provider credential.
 
 Both adapters are plain `fetch` with no dependency and live side by side in
 [`examples/providers/`](examples/providers) — they are recipes to copy, not code the library carries,

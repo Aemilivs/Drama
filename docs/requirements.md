@@ -234,6 +234,8 @@ The integration surface with any agent framework is one executor factory. These 
 
 Provider adapters live in `examples/providers/`, not in the library: drama carries no provider code, and these are recipes proven by tests.
 
+**Deliberately not read:** Claude Code's own credential store (Keychain or `~/.claude/.credentials.json`). Anthropic documents where it lives but forbids third-party collection or intermediation of Claude.ai session tokens; the adapter's header carries the citation.
+
 | ID | Requirement (abstract) | Concrete example |
 | --- | --- | --- |
 | R-ANTHROPIC-1 | The request is a Messages call, with the system prompt lifted out of `messages`. | `POST /v1/messages`, `anthropic-version`, Bearer auth, `max_tokens`, top-level `system`, only user/assistant turns. |
@@ -245,6 +247,7 @@ Provider adapters live in `examples/providers/`, not in the library: drama carri
 | R-ANTHROPIC-7 | An explicit environment credential wins over the store. | both present → `source: "env"`, key from the environment. |
 | R-ANTHROPIC-8 | A missing or malformed store means no credential, never an error. | absent file, non-JSON, `{}`, a string entry → `source: "none"`, `anthropicFromEnv` undefined. |
 | R-ANTHROPIC-9 | An oauth entry uses its access token, and the store path is overridable. | `{ type: "oauth", access }` → `authToken`; `XDG_DATA_HOME` honoured; another provider's entry ignored. |
+| R-ANTHROPIC-10 | The Claude Code token is the last resort, never the first. | `CLAUDE_CODE_OAUTH_TOKEN` → source `claude-code-token`; a bearer token beats an API key; an API key and the host store both beat the token. |
 
 ## Parallel steps — `test/requirements/parallel.requirements.test.ts`
 
