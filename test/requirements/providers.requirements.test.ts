@@ -1,3 +1,6 @@
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, test } from "bun:test";
 import {
   Evaluator,
@@ -13,8 +16,12 @@ import {
   ANTHROPIC_BASE_URL,
   ANTHROPIC_DEFAULT_MAX_TOKENS,
   ANTHROPIC_VERSION,
+  OPENCODE_AUTH_PATH_ENV,
   anthropicFromEnv,
   createAnthropicChat,
+  opencodeAuthPath,
+  opencodeCredential,
+  resolveAnthropicAuth,
 } from "../../examples/providers/anthropic.ts";
 
 interface FakeOptions {
@@ -57,6 +64,20 @@ function fakeAnthropic(options: FakeOptions = {}) {
   }) as unknown as typeof fetch;
   return { fetchImpl, calls };
 }
+
+function writeRaw(contents: string): string {
+  const dir = mkdtempSync(join(tmpdir(), "drama-auth-"));
+  const path = join(dir, "auth.json");
+  writeFileSync(path, contents);
+  return path;
+}
+
+function writeAuth(store: unknown): string {
+  return writeRaw(JSON.stringify(store));
+}
+
+/** A path that never exists, so a test cannot accidentally read the real store. */
+const NO_STORE = join(tmpdir(), "drama-no-such-auth-store.json");
 
 const messages = [
   { role: "system" as const, content: "You are terse." },
@@ -114,12 +135,15 @@ describe("Anthropic adapter requirements", () => {
   });
 
   test("R-ANTHROPIC-4 max_tokens is configurable, and the environment needs a key and a model", async () => {
-    expect(anthropicFromEnv({})).toBeUndefined();
-    expect(anthropicFromEnv({ ANTHROPIC_API_KEY: "k" })).toBeUndefined();
-    expect(anthropicFromEnv({ ANTHROPIC_MODEL: "m" })).toBeUndefined();
-    expect(typeof anthropicFromEnv({ ANTHROPIC_API_KEY: "k", ANTHROPIC_MODEL: "m" })).toBe(
-      "function",
-    );
+    expect(anthropicFromEnv({}, { authPath: NO_STORE })).toBeUndefined();
+    expect(anthropicFromEnv({ ANTHROPIC_API_KEY: "k" }, { authPath: NO_STORE })).toBeUndefined();
+    expect(anthropicFromEnv({ ANTHROPIC_MODEL: "m" }, { authPath: NO_STORE })).toBeUndefined();
+    expect(
+      typeof anthropicFromEnv(
+        { ANTHROPIC_API_KEY: "k", ANTHROPIC_MODEL: "m" },
+        { authPath: NO_STORE },
+      ),
+    ).toBe("function");
 
     // The API requires `max_tokens`; the caller can raise the default.
     const { fetchImpl, calls } = fakeAnthropic();
@@ -165,5 +189,84 @@ describe("Anthropic adapter requirements", () => {
     const performance = await new StageManager({ evaluator }).perform(scene, cast);
     expect(performance.finalResult.status).toBe("done");
     expect(performance.artifacts[0]!.content).toBe("42");
+  });
+
+  test("R-ANTHROPIC-6 the host's stored credential is reused when no key is set", async () => {
+    const authPath = writeAuth({ anthropic: { type: "api", key: "host-key" } });
+    const env = { ANTHROPIC_MODEL: "claude-opus-5-5" };
+
+    const auth = resolveAnthropicAuth(env, { authPath });
+    expect(auth.source).toBe("opencode-auth");
+    expect(auth.apiKey).toBe("host-key");
+    expect(typeof anthropicFromEnv(env, { authPath })).toBe("function");
+
+    // ...and the resolved credential is what authenticates the request.
+    const { fetchImpl, calls } = fakeAnthropic();
+    const chat = createAnthropicChat({
+      apiKey: auth.apiKey,
+      model: "claude-opus-5-5",
+      fetch: fetchImpl,
+    });
+    await chat(messages);
+    const headers = calls[0]!.init!.headers as Record<string, string>;
+    expect(headers.authorization).toBe("Bearer host-key");
+  });
+
+  test("R-ANTHROPIC-7 an explicit environment credential wins over the store", () => {
+    const authPath = writeAuth({ anthropic: { type: "api", key: "host-key" } });
+
+    const key = resolveAnthropicAuth(
+      { ANTHROPIC_API_KEY: "env-key", ANTHROPIC_MODEL: "m" },
+      { authPath },
+    );
+    expect(key.source).toBe("env");
+    expect(key.apiKey).toBe("env-key");
+
+    const token = resolveAnthropicAuth(
+      { ANTHROPIC_AUTH_TOKEN: "env-token", ANTHROPIC_MODEL: "m" },
+      { authPath },
+    );
+    expect(token.source).toBe("env");
+    expect(token.authToken).toBe("env-token");
+  });
+
+  test("R-ANTHROPIC-8 a missing or malformed store means no credential, never an error", () => {
+    const env = { ANTHROPIC_MODEL: "m" };
+
+    expect(resolveAnthropicAuth(env, { authPath: NO_STORE }).source).toBe("none");
+    expect(anthropicFromEnv(env, { authPath: NO_STORE })).toBeUndefined();
+
+    const broken = writeRaw("this is not json");
+    expect(opencodeCredential("anthropic", { authPath: broken })).toBeUndefined();
+    expect(resolveAnthropicAuth(env, { authPath: broken }).source).toBe("none");
+
+    expect(resolveAnthropicAuth(env, { authPath: writeAuth({}) }).source).toBe("none");
+    expect(
+      resolveAnthropicAuth(env, { authPath: writeAuth({ anthropic: "just-a-string" }) }).source,
+    ).toBe("none");
+  });
+
+  test("R-ANTHROPIC-9 an oauth entry uses its access token, and the store path is overridable", () => {
+    const oauth = resolveAnthropicAuth(
+      { ANTHROPIC_MODEL: "m" },
+      { authPath: writeAuth({ anthropic: { type: "oauth", access: "oauth-token" } }) },
+    );
+    expect(oauth.source).toBe("opencode-auth");
+    expect(oauth.authToken).toBe("oauth-token");
+    expect(oauth.apiKey).toBeUndefined();
+
+    // `type: "oauth"` without a token is not a credential.
+    const hollow = writeAuth({ anthropic: { type: "oauth" } });
+    expect(resolveAnthropicAuth({ ANTHROPIC_MODEL: "m" }, { authPath: hollow }).source).toBe("none");
+
+    // The host's location is XDG-aware and explicitly overridable.
+    expect(opencodeAuthPath({ XDG_DATA_HOME: "/tmp/xdg" })).toBe("/tmp/xdg/opencode/auth.json");
+    expect(opencodeAuthPath({ [OPENCODE_AUTH_PATH_ENV]: "/tmp/custom.json" })).toBe(
+      "/tmp/custom.json",
+    );
+
+    // Another provider's credential is not this provider's credential.
+    const other = writeAuth({ openai: { type: "api", key: "openai-key" } });
+    expect(opencodeCredential("anthropic", { authPath: other })).toBeUndefined();
   });
 });

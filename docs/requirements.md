@@ -241,6 +241,10 @@ Provider adapters live in `examples/providers/`, not in the library: drama carri
 | R-ANTHROPIC-3 | A non-2xx surfaces the documented error shape. | `401` + `{ error: { type, message } }` → `"authentication_error: invalid x-api-key"`. |
 | R-ANTHROPIC-4 | `max_tokens` is configurable, and the environment needs a key and a model. | `maxTokens: 123` reaches the body; a partial env yields `undefined`. |
 | R-ANTHROPIC-5 | A Claude-backed actor drives a real performance. | fake fetch → `done`, artifact content `"42"`. |
+| R-ANTHROPIC-6 | The host's stored credential is reused when no key is set. | `anthropic` entry in a store fixture → `source: "opencode-auth"`, and it authenticates the request. |
+| R-ANTHROPIC-7 | An explicit environment credential wins over the store. | both present → `source: "env"`, key from the environment. |
+| R-ANTHROPIC-8 | A missing or malformed store means no credential, never an error. | absent file, non-JSON, `{}`, a string entry → `source: "none"`, `anthropicFromEnv` undefined. |
+| R-ANTHROPIC-9 | An oauth entry uses its access token, and the store path is overridable. | `{ type: "oauth", access }` → `authToken`; `XDG_DATA_HOME` honoured; another provider's entry ignored. |
 
 ## Parallel steps — `test/requirements/parallel.requirements.test.ts`
 
