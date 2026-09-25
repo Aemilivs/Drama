@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "drama",
+  "project_id": "fd5f5fd1-eb6f-4d42-9e9d-290cd6232b1a"
+}
