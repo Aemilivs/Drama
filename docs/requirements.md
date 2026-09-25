@@ -337,6 +337,14 @@ Seeded (`mulberry32`) so any failure is reproducible from its case index.
 | R-DET-3 | Every artifact and turn id is unique within a performance. | Id sets have no duplicates. |
 | R-COST-1 | The number of executor calls equals the number of turns. | A counting executor is invoked exactly once per recorded turn — no hidden calls. |
 | R-COST-2 | No turn ever receives the same artifact twice. | Across a reperformance the consumer of `Report` receives two *distinct* reports. |
+| R-COST-3 | Reported usage reaches the turn and sums across the performance. | two priced executors → `usage.costUsd` `[0.1, 0.25]`, tokens kept. |
+| R-COST-4 | Usage survives the serializer. | round-trip keeps both `costUsd` values. |
+| R-COST-5 | `maxCostUsd` stops the work, and the trace reports what that left. | budget below the first step's cost → the second never runs; the budget is the reason when the goal is unmet, and is outranked by a satisfied goal. |
+| R-COST-6 | An unreported cost never trips the budget. | no `usage` anywhere → both steps run, no `max cost` reason. |
+
+Cost is **executor-reported**: drama prices nothing itself, and unknown is not zero (R-COST-6). A budget is checked between waves like `maxTurns`, so it is as accurate as the numbers executors supply and no more.
+
+Open question, recorded rather than decided: a budget halt is a *truncation*, not a failure, so when the artifacts still satisfy the criteria `finalResult` says `evaluation passed` and the truncation is visible only in the trace. The same is true of `maxTurns` today. Whether `finalResult` should carry an explicit "truncated by budget" marker is a design decision, not an oversight to patch silently.
 
 ## Findings
 

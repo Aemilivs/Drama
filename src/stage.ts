@@ -115,6 +115,12 @@ export interface StageOptions {
   /** Cap on actor executions across the whole performance. */
   maxTurns?: number;
   /**
+   * Cap on the cost executors report. Checked between waves like `maxTurns`, and
+   * only as accurate as the numbers executors supply: a stage told nothing about
+   * cost never trips this.
+   */
+  maxCostUsd?: number;
+  /**
    * Approves a gated step. Absent or false means the gate is denied, and a
    * denied required step halts the performance — gates fail closed.
    */
@@ -160,6 +166,16 @@ function selectInputs(artifacts: Artifact[], consumes: string[]): Artifact[] {
 }
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** What the executors reported spending. Unknown costs are skipped, not assumed zero. */
+function spentUsd(turns: ActorTurn[]): number {
+  let total = 0;
+  for (const turn of turns) {
+    const cost = turn.usage?.costUsd;
+    if (typeof cost === "number" && Number.isFinite(cost)) total += cost;
+  }
+  return total;
+}
 
 /**
  * One executor call, under a timeout and the performance's own signal.
@@ -411,6 +427,17 @@ export class StageManager {
           break;
         }
 
+        if (opts.maxCostUsd !== undefined && spentUsd(turns) > opts.maxCostUsd) {
+          halted = true;
+          result = {
+            status: "failed",
+            reason: `max cost reached ($${opts.maxCostUsd})`,
+            artifacts: artifacts.slice(),
+            evaluation: null,
+          };
+          break;
+        }
+
         // Gates are resolved before anything in the wave runs. A denied required
         // step halts the performance; a denied optional step is skipped.
         const admitted: ProtocolStep[] = [];
@@ -558,6 +585,7 @@ export class StageManager {
               startedAt: attempt.startedAt,
               endedAt: attempt.endedAt,
               durationMs: attempt.endedAt - attempt.startedAt,
+              usage: attempt.output.usage,
             };
             record.turns.push(turn);
             turns.push(turn);

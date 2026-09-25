@@ -46,6 +46,7 @@ export type {
   ToolContext,
   ToolHandler,
   ToolRegistry,
+  Usage,
   FunctionActorOptions,
   ChatMessage,
   ChatFn,

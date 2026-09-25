@@ -20,12 +20,25 @@ export interface ToolCall {
   error?: string;
 }
 
+/**
+ * What an execution cost, as reported by the executor. drama prices nothing
+ * itself: an executor that knows what it spent says so, and the stage only adds
+ * it up. Absent numbers are simply unknown, never assumed to be zero.
+ */
+export interface Usage {
+  inputTokens?: number;
+  outputTokens?: number;
+  /** The executor's own estimate of the price. */
+  costUsd?: number;
+}
+
 export interface ActorOutput {
   artifacts: Artifact[];
   message?: string;
   toolCalls?: ToolCall[];
   status: "ok" | "failed";
   error?: string;
+  usage?: Usage;
 }
 
 /**
@@ -89,6 +102,8 @@ export interface ActorTurn {
   startedAt: number;
   endedAt: number;
   durationMs: number;
+  /** What the executor reported spending, when it reported anything. */
+  usage?: Usage;
 }
 
 export interface ToolContext {
@@ -170,12 +185,16 @@ export function artifact(
   return { id: nextId("artifact"), kind, producedBy, content, createdAt: Date.now(), meta };
 }
 
-export function ok(artifacts: Artifact[], message?: string): ActorOutput {
-  return { artifacts, message, status: "ok" };
+export function ok(artifacts: Artifact[], message?: string, usage?: Usage): ActorOutput {
+  return { artifacts, message, status: "ok", usage };
 }
 
-export function failed(error: string, artifacts: Artifact[] = []): ActorOutput {
-  return { artifacts, status: "failed", error };
+export function failed(
+  error: string,
+  artifacts: Artifact[] = [],
+  usage?: Usage,
+): ActorOutput {
+  return { artifacts, status: "failed", error, usage };
 }
 
 export interface FunctionActorOptions
