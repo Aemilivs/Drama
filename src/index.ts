@@ -66,6 +66,7 @@ export type {
   Protocol,
   ProtocolStep,
   ProtocolStepInput,
+  StepRetry,
   Cast,
   CastIssue,
   CastIssueCode,

@@ -17,6 +17,35 @@ import type { Evaluation } from "./evaluation";
  * The protocol step's artifact inputs are explicit: `consumes: []` means the
  * actor receives no input artifacts. List the kinds it needs, or compute them.
  */
+/**
+ * How a failed step is retried before the failure reaches diagnosis. Retrying is
+ * the cheap layer: diagnosis leads to a whole new performance, which suits
+ * structural failure rather than a flaky call.
+ */
+export interface StepRetry {
+  /** Total attempts, so `1` means "no retry". */
+  attempts: number;
+  /** Pause between attempts, in ms. */
+  backoffMs?: number;
+}
+
+function readRetry(value: unknown): StepRetry | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const raw = value as { attempts?: unknown; backoffMs?: unknown };
+  if (typeof raw.attempts !== "number" || !Number.isFinite(raw.attempts)) return undefined;
+  const attempts = Math.max(1, Math.floor(raw.attempts));
+  if (typeof raw.backoffMs !== "number" || !Number.isFinite(raw.backoffMs) || raw.backoffMs <= 0) {
+    return { attempts };
+  }
+  return { attempts, backoffMs: Math.floor(raw.backoffMs) };
+}
+
+function readTimeout(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value > 0
+    ? Math.floor(value)
+    : undefined;
+}
+
 export interface ProtocolStep {
   id: string;
   actor: string;
@@ -31,6 +60,10 @@ export interface ProtocolStep {
   owns?: string[];
   /** Irreversible edge: requires explicit approval before it runs. */
   gate?: boolean;
+  /** Retry policy for this step; falls back to the stage default. */
+  retry?: StepRetry;
+  /** Fail this step if its actor has not finished within this many ms. */
+  timeoutMs?: number;
 }
 
 export interface Protocol {
@@ -95,6 +128,8 @@ export interface ProtocolStepInput {
   optional?: boolean;
   owns?: string[];
   gate?: boolean;
+  retry?: StepRetry;
+  timeoutMs?: number;
 }
 
 export function createProtocol(steps: ProtocolStepInput[], notes = ""): Protocol {
@@ -110,6 +145,8 @@ export function createProtocol(steps: ProtocolStepInput[], notes = ""): Protocol
         optional: step.optional === true,
         owns: readStrings(step.owns),
         gate: step.gate === true,
+        retry: readRetry(step.retry),
+        timeoutMs: readTimeout(step.timeoutMs),
       };
     }),
     notes: typeof notes === "string" ? notes : "",

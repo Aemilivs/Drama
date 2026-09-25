@@ -22,6 +22,7 @@ You decide *who works on this specific scene and how they interact*. You do not 
 9. **Gate the irreversible.** A step whose effects cannot be undone (`gate: true`) pauses for explicit approval. Do not gate reversible work; do gate anything that sends, publishes, deploys or deletes.
 10. **No fake edges.** Draw an ordering only where a step reads another step's output. Two steps that never read each other are a wave, not a sequence — `planWaves` shows the waves, and `independent_steps` warns when you serialized them anyway. Do not hide a real dependency behind a step order either: express it as `consumes`.
 11. **Verify in a separate context, with different questions.** A verifier must not share the producer's session — that is the host's wiring, and it is non-negotiable. When robustness matters, cast *more than one* verifier and give each a **different** question (is it correct? is it current? is the source real?): identical skeptics miss what diverse ones catch. Prefer a deterministic verifier — tests, a compiler, a query — over a model. Declare each verifier's question as `question`: two verifiers asking the same thing are **copies**, and `duplicate_question` will say so.
+12. **Retry the flaky, diagnose the structural.** A step that can fail transiently declares `retry: { attempts, backoffMs }`; a step that could hang declares `timeoutMs`. Retrying is the cheap layer — a reperform is a whole new performance and belongs to structural failure. Beware combining `retry` with `gate`: retrying a gated step re-runs an approved irreversible action, so only do both deliberately.
 8. **One synthesizer, and only when needed.** Add a synthesizer when there is more than one producer; give it `interactionPermissions: [synthesize]`. Otherwise the last producer produces the final artifact.
 9. **Justify and bound.** State `rationale`, and state what should cause a recast versus another performance.
 10. **Do not invent tools.** Only use `available_tools` from the scene, or well-known deterministic capabilities.
@@ -57,6 +58,8 @@ protocol:
       optional: false
       owns: [<path globs this step may write>]   # e.g. ["src/**"]
       gate: false                                # true = irreversible; needs approval
+      retry: { attempts: 3, backoffMs: 500 }     # omit for a single attempt
+      timeoutMs: 120000                          # omit to wait indefinitely
 
 rationale: <why this is the smallest cast that can pass the criteria>
 recastsWhen: [missing_capability, missing_information]

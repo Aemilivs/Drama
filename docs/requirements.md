@@ -283,18 +283,39 @@ Borrowed from the `/graph` task-graph runner, which already enforced them: a hum
 
 ## Cancellation — `test/requirements/abort.requirements.test.ts`
 
-A performance can be stopped between waves through `StageOptions.signal`. The wave already in flight is allowed to finish — an executor cannot be killed, only told — which is why the same signal also reaches `ActorContext`, so an executor can abort its own transport call.
+A performance can be stopped between waves through `StageOptions.signal`. The wave already in flight is allowed to finish — an executor cannot be killed, only told — which is why `ActorContext` carries a signal for the executor to abort its own transport call. Each attempt gets its own signal, derived from the caller's so that it also covers the attempt's timeout; it follows the performance signal rather than being the same object.
 
 | ID | Requirement (abstract) | Concrete example |
 | --- | --- | --- |
 | R-ABORT-1 | An already-aborted signal runs nothing. | zero actor executions, zero turns, status `aborted`. |
 | R-ABORT-2 | Aborting mid-performance keeps what was produced and starts nothing new. | the first step aborts the controller → the second never runs, `Draft` survives. |
-| R-ABORT-3 | The executor receives the performance signal. | `ctx.signal === controller.signal`; an un-fired signal changes nothing (`done`). |
+| R-ABORT-3 | The signal an attempt sees follows the performance signal. | cancel mid-attempt → `ctx.signal.aborted`; an un-fired signal leaves it clean. |
 | R-ABORT-4 | Cancellation is an outcome, not an error. | exactly one `finished` event, last in the trace, `status: "aborted"`. |
 | R-ABORT-5 | A canceled performance is never evaluated. | no `evaluated` event; `iterations[].evaluation === null`. |
 | R-ABORT-6 | An aborted performance round-trips through the serializer. | `deserializePerformance(serializePerformance(p))` keeps `aborted`. |
 
 Known limit, deliberate: the check sits between waves, so casting, dressing and auditioning have already happened by the time a pre-aborted signal is noticed. Noticing it before the first wave would mean resolving the cast lazily — a larger change than this primitive needs today.
+
+## Step retry and timeout — `test/requirements/retry.requirements.test.ts`
+
+A transient failure is retried at the step, before it can reach diagnosis: diagnosis is the expensive layer (a reperform is a whole new performance) and suits structural failure, not a flaky call. `ProtocolStep.retry` / `timeoutMs` fall back to the stage defaults `StageOptions.retry` / `timeoutMs`.
+
+| ID | Requirement (abstract) | Concrete example |
+| --- | --- | --- |
+| R-STEP-RETRY-1 | A retried failure reaches neither diagnosis nor the artifacts. | fail twice then succeed → `done`, one `Report`, `failures` empty. |
+| R-STEP-RETRY-2 | `attempts` counts total calls, so `1` means no retry. | `attempts: 1` → exactly one call. |
+| R-STEP-RETRY-3 | Exhaustion records exactly one failure and halts a mandatory step. | `attempts: 2`, always failing → `failed`, one failure, `"attempt 2"`. |
+| R-STEP-RETRY-4 | Every executor call is its own turn. | two calls → two turns, the first failed. |
+| R-STEP-RETRY-5 | Each retried attempt is visible in the trace, in order. | two `step_retry` events with attempts `[1, 2]` and their errors. |
+| R-STEP-RETRY-6 | A stage default applies, and a step overrides it. | default 2 → two calls; step 1 over default 4 → one call. |
+| R-STEP-TIMEOUT-1 | A hanging attempt fails instead of hanging the performance. | never-settling executor → one failed turn, `"timed out after 20ms"`. |
+| R-STEP-TIMEOUT-2 | The attempt's signal fires on timeout. | the executor observes `abort`. |
+| R-STEP-TIMEOUT-3 | A timed-out optional step does not halt the performance. | optional hanging step → `done`, timeout visible on the last turn. |
+| R-STEP-TIMEOUT-4 | A timeout is retried like any other failure. | `timeoutMs` + `attempts: 2` → two timed-out turns, one `step_retry`. |
+
+Design note: an intermediate failed attempt is recorded as a **turn** but not as a **failure**. The turn keeps the cost requirement honest (R-COST-1 counts executor calls, so folding attempts into one turn would understate the work); withholding it from `failures` is what makes the retry buy something, since `failures` is what drives diagnosis.
+
+Known hazard, not enforced: `retry` on a `gate`ed step re-runs an approved irreversible action up to `attempts` times. Both fields are honoured as declared; combining them is the author's deliberate call, not an accident the library should silently prevent.
 
 ## Property — `test/requirements/properties.requirements.test.ts`
 

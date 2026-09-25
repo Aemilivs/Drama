@@ -12,6 +12,7 @@ import type { Scene, SceneAnalysis, SceneDesignInput } from "./scene";
 import { SceneDesigner } from "./scene";
 import type {
   Actor,
+  ActorContext,
   ActorExecutor,
   ActorOutput,
   ActorTurn,
@@ -19,7 +20,7 @@ import type {
   ToolRegistry,
 } from "./actor";
 import { createLlmExecutor, createToolRegistry, failed } from "./actor";
-import type { Cast, ProtocolStep } from "./cast";
+import type { Cast, ProtocolStep, StepRetry } from "./cast";
 import { CastingDirector } from "./cast";
 import type { ActorFailure, Evaluation } from "./evaluation";
 import { Evaluator } from "./evaluation";
@@ -32,6 +33,7 @@ export type StageEvent =
   | { type: "actor_activated"; iteration: number; step: string; actor: string; inputIds: string[] }
   | { type: "actor_output"; iteration: number; step: string; actor: string; artifactIds: string[] }
   | { type: "actor_failed"; iteration: number; step: string; actor: string; error: string }
+  | { type: "step_retry"; iteration: number; step: string; actor: string; attempt: number; error: string }
   | { type: "evaluated"; iteration: number; status: Status; recommendedAction: RecommendedAction; diagnosis: Diagnosis }
   | { type: "decision"; iteration: number; action: RecommendedAction; diagnosis: Diagnosis }
   | { type: "recast"; attempt: number; diagnosis: Diagnosis; actors: string[] }
@@ -123,6 +125,10 @@ export interface StageOptions {
    * same signal also reaches `ActorContext` for the executor to abort its own call.
    */
   signal?: AbortSignal;
+  /** Default retry policy for steps that do not carry their own. */
+  retry?: StepRetry;
+  /** Default per-attempt timeout in ms for steps that do not carry their own. */
+  timeoutMs?: number;
   onEvent?: (event: StageEvent) => void;
 }
 
@@ -153,17 +159,79 @@ function selectInputs(artifacts: Artifact[], consumes: string[]): Artifact[] {
   return artifacts.filter((item) => consumes.includes(item.kind));
 }
 
+const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * One executor call, under a timeout and the performance's own signal.
+ *
+ * The executor receives a signal that fires on either, so a well-behaved executor
+ * can stop its transport; racing guarantees that the stage stops waiting even when
+ * it cannot. A timed-out attempt is a failed attempt, never a throw.
+ */
+async function runAttempt(
+  executor: ActorExecutor,
+  context: ActorContext,
+  timeoutMs: number | undefined,
+  parentSignal: AbortSignal | undefined,
+): Promise<ActorOutput> {
+  const controller = new AbortController();
+  const forward = () => controller.abort();
+  if (parentSignal) {
+    if (parentSignal.aborted) controller.abort();
+    else parentSignal.addEventListener("abort", forward, { once: true });
+  }
+
+  let timedOut = false;
+  const timer =
+    timeoutMs !== undefined
+      ? setTimeout(() => {
+          timedOut = true;
+          controller.abort();
+        }, timeoutMs)
+      : undefined;
+
+  try {
+    const executed = Promise.resolve().then(() =>
+      executor({ ...context, signal: controller.signal }),
+    );
+    // A late rejection after the race settles must not surface as unhandled.
+    void executed.catch(() => undefined);
+
+    if (timer === undefined) return await executed;
+
+    return await Promise.race([
+      executed,
+      new Promise<ActorOutput>((resolve) => {
+        controller.signal.addEventListener(
+          "abort",
+          () => resolve(failed(timedOut ? `timed out after ${timeoutMs}ms` : "aborted")),
+          { once: true },
+        );
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+    parentSignal?.removeEventListener("abort", forward);
+  }
+}
+
 interface PreparedStep {
   step: ProtocolStep;
   actor?: Actor;
   inputs: Artifact[];
 }
 
+interface AttemptOutcome {
+  attempt: number;
+  output: ActorOutput;
+  startedAt: number;
+  endedAt: number;
+}
+
 interface StepOutcome {
   prepared: PreparedStep;
-  output?: ActorOutput;
-  startedAt?: number;
-  endedAt?: number;
+  /** One entry per executor call, in order. Empty when the step names nobody. */
+  attempts: AttemptOutcome[];
 }
 
 export class StageManager {
@@ -401,28 +469,47 @@ export class StageManager {
         const history = turns.slice();
         const outcomes: StepOutcome[] = await Promise.all(
           prepared.map(async (item): Promise<StepOutcome> => {
-            if (!item.actor) return { prepared: item };
-            const startedAt = this.clock();
-            let output: ActorOutput;
-            try {
-              const executor = this.resolveExecutor(item.actor, opts);
-              output = await executor({
-                scene,
-                actor: item.actor,
-                instruction: item.step.instruction,
-                inputs: item.inputs,
-                history,
-                tools: opts.tools ?? createToolRegistry(),
-                signal: opts.signal,
-                iteration: iterationIndex,
-              });
-              if (!output || typeof output !== "object") {
-                output = failed("executor returned no output");
+            if (!item.actor) return { prepared: item, attempts: [] };
+
+            const policy = item.step.retry ?? opts.retry;
+            const declared = policy && typeof policy.attempts === "number" ? policy.attempts : 1;
+            const total = Number.isFinite(declared) ? Math.max(1, Math.floor(declared)) : 1;
+            const timeoutMs = item.step.timeoutMs ?? opts.timeoutMs;
+            const attempts: AttemptOutcome[] = [];
+
+            for (let attempt = 1; attempt <= total; attempt += 1) {
+              const startedAt = this.clock();
+              let output: ActorOutput;
+              try {
+                output = await runAttempt(
+                  this.resolveExecutor(item.actor, opts),
+                  {
+                    scene,
+                    actor: item.actor,
+                    instruction: item.step.instruction,
+                    inputs: item.inputs,
+                    history,
+                    tools: opts.tools ?? createToolRegistry(),
+                    iteration: iterationIndex,
+                  },
+                  timeoutMs,
+                  opts.signal,
+                );
+                if (!output || typeof output !== "object") {
+                  output = failed("executor returned no output");
+                }
+              } catch (error) {
+                output = failed(messageOf(error));
               }
-            } catch (error) {
-              output = failed(messageOf(error));
+              attempts.push({ attempt, output, startedAt, endedAt: this.clock() });
+
+              if (output.status === "ok" || attempt === total) break;
+              // Cancellation is final: never retry into a performance that was stopped.
+              if (opts.signal?.aborted) break;
+              if (policy?.backoffMs) await sleep(policy.backoffMs);
             }
-            return { prepared: item, output, startedAt, endedAt: this.clock() };
+
+            return { prepared: item, attempts };
           }),
         );
 
@@ -443,24 +530,44 @@ export class StageManager {
             continue;
           }
 
-          const output = outcome.output!;
-          const turn: ActorTurn = {
-            id: nextId("turn"),
-            iteration: iterationIndex,
-            step: step.id,
-            actor: actor.name,
-            instruction: step.instruction,
-            inputIds: inputs.map((item) => item.id),
-            output,
-            startedAt: outcome.startedAt!,
-            endedAt: outcome.endedAt!,
-            durationMs: outcome.endedAt! - outcome.startedAt!,
-          };
-          record.turns.push(turn);
-          turns.push(turn);
+          // Retries are reported here rather than where they happen: this loop runs
+          // in declaration order, which is what keeps the trace deterministic.
+          for (const earlier of outcome.attempts.slice(0, -1)) {
+            emit({
+              type: "step_retry",
+              iteration: iterationIndex,
+              step: step.id,
+              actor: actor.name,
+              attempt: earlier.attempt,
+              error: earlier.output.error ?? "actor failed",
+            });
+          }
 
-          if (output.status === "failed") {
-            const error = output.error ?? "actor failed";
+          // One turn per executor call: a retry is a real call, and the cost
+          // requirement counts calls, so folding attempts into a single turn would
+          // understate the work the performance actually did.
+          for (const attempt of outcome.attempts) {
+            const turn: ActorTurn = {
+              id: nextId("turn"),
+              iteration: iterationIndex,
+              step: step.id,
+              actor: actor.name,
+              instruction: step.instruction,
+              inputIds: inputs.map((item) => item.id),
+              output: attempt.output,
+              startedAt: attempt.startedAt,
+              endedAt: attempt.endedAt,
+              durationMs: attempt.endedAt - attempt.startedAt,
+            };
+            record.turns.push(turn);
+            turns.push(turn);
+          }
+
+          const last = outcome.attempts.at(-1)!;
+          if (last.output.status === "failed") {
+            // Only the final attempt is a failure of the step. An attempt that was
+            // retried away must not reach diagnosis, or the retry would buy nothing.
+            const error = last.output.error ?? "actor failed";
             record.failures.push({ actor: actor.name, step: step.id, error });
             emit({
               type: "actor_failed",
@@ -471,13 +578,13 @@ export class StageManager {
             });
             if (!step.optional) halted = true;
           } else {
-            artifacts.push(...output.artifacts);
+            artifacts.push(...last.output.artifacts);
             emit({
               type: "actor_output",
               iteration: iterationIndex,
               step: step.id,
               actor: actor.name,
-              artifactIds: output.artifacts.map((item) => item.id),
+              artifactIds: last.output.artifacts.map((item) => item.id),
             });
           }
         }

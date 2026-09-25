@@ -132,21 +132,36 @@ describe("Cancellation requirements", () => {
     expect(performance.artifacts.map((item) => item.kind)).toEqual(["Draft"]);
   });
 
-  test("R-ABORT-3 the executor receives the performance signal", async () => {
+  test("R-ABORT-3 the signal an attempt sees follows the performance signal", async () => {
     const controller = new AbortController();
     let received: AbortSignal | undefined;
 
     const performance = await run(
       soloCast(async (ctx: ActorContext) => {
         received = ctx.signal;
+        controller.abort();
         return ok([artifact("solo", "Report", "r")]);
       }),
       controller.signal,
     );
 
-    expect(received).toBe(controller.signal);
-    // Nothing aborted here: a signal that never fires changes nothing.
+    // Each attempt gets its own signal -- it has to cover its timeout too -- so this
+    // is not the same object; what matters is that cancelling the performance fires it.
+    expect(received).toBeDefined();
+    expect(received!.aborted).toBe(true);
     expect(performance.finalResult.status).toBe("done");
+
+    // A signal that never fires leaves the attempt's own signal clean.
+    let quiet: AbortSignal | undefined;
+    const undisturbed = await run(
+      soloCast(async (ctx: ActorContext) => {
+        quiet = ctx.signal;
+        return ok([artifact("solo", "Report", "r")]);
+      }),
+      new AbortController().signal,
+    );
+    expect(quiet!.aborted).toBe(false);
+    expect(undisturbed.finalResult.status).toBe("done");
   });
 
   test("R-ABORT-4 the trace records the cancellation as an outcome, not an error", async () => {
