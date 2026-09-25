@@ -127,6 +127,12 @@ export interface ActorContext {
   inputs: Artifact[];
   history: ActorTurn[];
   tools: ToolRegistry;
+  /**
+   * The performance's cancellation signal, when the caller supplied one. An
+   * executor should pass it to its own transport so an in-flight call stops
+   * instead of being merely abandoned.
+   */
+  signal?: AbortSignal;
   iteration: number;
 }
 

@@ -36,7 +36,7 @@ export type StageEvent =
   | { type: "decision"; iteration: number; action: RecommendedAction; diagnosis: Diagnosis }
   | { type: "recast"; attempt: number; diagnosis: Diagnosis; actors: string[] }
   | { type: "redesign"; attempt: number; diagnosis: Diagnosis; sceneId: string }
-  | { type: "finished"; status: "done" | "failed"; reason: string }
+  | { type: "finished"; status: PerformanceStatus; reason: string }
   | { type: "gate"; iteration: number; step: string; actor: string; approved: boolean }
   | AuditionEvent;
 
@@ -48,8 +48,14 @@ export interface IterationRecord {
   decision: RecommendedAction | null;
 }
 
+/**
+ * How a performance ended. `aborted` is its own outcome rather than a flavour of
+ * `failed`: nothing went wrong, the caller stopped asking for work.
+ */
+export type PerformanceStatus = "done" | "failed" | "aborted";
+
 export interface PerformanceResult {
-  status: "done" | "failed";
+  status: PerformanceStatus;
   reason: string;
   artifacts: Artifact[];
   evaluation: Evaluation | null;
@@ -111,6 +117,12 @@ export interface StageOptions {
    * denied required step halts the performance — gates fail closed.
    */
   approve?: Approver;
+  /**
+   * Cancels a running performance. Checked between waves, so the wave already in
+   * flight finishes — an executor cannot be killed, only told, which is why the
+   * same signal also reaches `ActorContext` for the executor to abort its own call.
+   */
+  signal?: AbortSignal;
   onEvent?: (event: StageEvent) => void;
 }
 
@@ -294,8 +306,22 @@ export class StageManager {
       const remaining = [...cast.protocol.steps];
       const produced = new Set<string>();
       let halted = false;
+      let canceled = false;
 
       while (remaining.length > 0 && !halted) {
+        // Cancellation is checked between waves: whatever is already running is
+        // allowed to finish, and nothing new is started.
+        if (opts.signal?.aborted) {
+          canceled = true;
+          result = {
+            status: "aborted",
+            reason: "aborted before the next wave",
+            artifacts: artifacts.slice(),
+            evaluation: null,
+          };
+          emit({ type: "finished", status: "aborted", reason: "aborted before the next wave" });
+          break;
+        }
         // Take the longest prefix whose inputs are already available. With
         // `parallel` off the cap is 1, so this is exactly the sequential order.
         const wave: ProtocolStep[] = [];
@@ -387,6 +413,7 @@ export class StageManager {
                 inputs: item.inputs,
                 history,
                 tools: opts.tools ?? createToolRegistry(),
+                signal: opts.signal,
                 iteration: iterationIndex,
               });
               if (!output || typeof output !== "object") {
@@ -458,6 +485,10 @@ export class StageManager {
         for (const step of wave) for (const kind of step.produces) produced.add(kind);
         remaining.splice(0, wave.length);
       }
+
+      // A canceled performance never reaches evaluation: judging a show the caller
+      // already stopped would only produce a decision nobody asked for.
+      if (canceled) break;
       const evaluation = await this.evaluator.evaluate({
         scene,
         cast,

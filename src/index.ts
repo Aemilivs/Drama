@@ -124,6 +124,7 @@ export type {
   StageManagerOptions,
   GateRequest,
   Approver,
+  PerformanceStatus,
 } from "./stage";
 export { StageManager } from "./stage";
 

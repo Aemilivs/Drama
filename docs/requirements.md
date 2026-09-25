@@ -281,6 +281,21 @@ Borrowed from the `/graph` task-graph runner, which already enforced them: a hum
 | R-GUARD-9 | An independent pair declared in sequence is reported as a fake edge. | Two `consumes: []` steps → `independent_steps`; a dependent pair → silent. |
 | R-GUARD-10 | Terminal artifacts with several owners are reported. | Two terminal producers → `no_merge_owner`; a synthesizer consuming both → silent. |
 
+## Cancellation — `test/requirements/abort.requirements.test.ts`
+
+A performance can be stopped between waves through `StageOptions.signal`. The wave already in flight is allowed to finish — an executor cannot be killed, only told — which is why the same signal also reaches `ActorContext`, so an executor can abort its own transport call.
+
+| ID | Requirement (abstract) | Concrete example |
+| --- | --- | --- |
+| R-ABORT-1 | An already-aborted signal runs nothing. | zero actor executions, zero turns, status `aborted`. |
+| R-ABORT-2 | Aborting mid-performance keeps what was produced and starts nothing new. | the first step aborts the controller → the second never runs, `Draft` survives. |
+| R-ABORT-3 | The executor receives the performance signal. | `ctx.signal === controller.signal`; an un-fired signal changes nothing (`done`). |
+| R-ABORT-4 | Cancellation is an outcome, not an error. | exactly one `finished` event, last in the trace, `status: "aborted"`. |
+| R-ABORT-5 | A canceled performance is never evaluated. | no `evaluated` event; `iterations[].evaluation === null`. |
+| R-ABORT-6 | An aborted performance round-trips through the serializer. | `deserializePerformance(serializePerformance(p))` keeps `aborted`. |
+
+Known limit, deliberate: the check sits between waves, so casting, dressing and auditioning have already happened by the time a pre-aborted signal is noticed. Noticing it before the first wave would mean resolving the cast lazily — a larger change than this primitive needs today.
+
 ## Property — `test/requirements/properties.requirements.test.ts`
 
 Seeded (`mulberry32`) so any failure is reproducible from its case index.
