@@ -300,8 +300,9 @@ Google ADK, CrewAI and Mastra: [`docs/engines.md`](docs/engines.md).
 
 ### Use it from OpenCode
 
-Copy (or symlink) the `.opencode/` directory into a project and the same loop is available to an
-agent:
+The same loop is available to an agent. Install it once for the whole machine, or vendor it into a
+single project — both procedures, with a verification step an agent can run, are in
+[`docs/install.md`](docs/install.md):
 
 | Path | Role |
 | --- | --- |
@@ -350,7 +351,7 @@ src/
 .opencode/       skills, project tool, audition libraries
 examples/        incident-rca · audition · llm · anthropic · providers
 test/            behavioural tests and formalized requirements
-docs/            architecture · actors · engines · graph-engineering · prior-art · requirements · ROADMAP
+docs/            architecture · actors · engines · graph-engineering · install · prior-art · requirements · ROADMAP
 ```
 
 ### Testing
@@ -389,6 +390,7 @@ accepted broken shapes, and a fake edge in the flagship example.
 ### Further reading
 
 - [`docs/architecture.md`](docs/architecture.md) — module map, dependency direction, data flow.
+- [`docs/install.md`](docs/install.md) — installing into OpenCode, host-wide or per project, with a verification step.
 - [`docs/actors.md`](docs/actors.md) — roles vs personas, the casting call, the refusal cache.
 - [`docs/graph-engineering.md`](docs/graph-engineering.md) — how drama maps to the task-graph discipline.
 - [`docs/engines.md`](docs/engines.md) — using LangGraph, the OpenAI Agents SDK, Google ADK, CrewAI or Mastra as an actor.
