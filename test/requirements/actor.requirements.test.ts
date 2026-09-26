@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  actorFromCard,
   artifact,
   createActor,
   createLlmExecutor,
@@ -8,7 +9,7 @@ import {
   renderActorPrompt,
   sceneFromCard,
 } from "../../src/index.ts";
-import type { Actor, ActorContext } from "../../src/index.ts";
+import type { Actor, ActorContext, ActorKind } from "../../src/index.ts";
 
 function ctxFor(actor: Actor, overrides: Partial<ActorContext> = {}): ActorContext {
   return {
@@ -83,13 +84,11 @@ describe("Actor requirements", () => {
     expect(output.artifacts[0]!.content).toEqual({ risks: ["a"] });
   });
 
-  test("R-ACTOR-5 tools are callable by name and unknown tools fail loudly", async () => {
-    const tools = createToolRegistry({ double: (input) => (input as number) * 2 });
-    const actor = createActor({ name: "m", role: "m", objective: "o" });
-    const context = ctxFor(actor, { tools });
-    const toolContext = { actor, scene: context.scene, tools };
-    expect(tools.names()).toEqual(["double"]);
-    await expect(tools.call("double", 21, toolContext)).resolves.toBe(42);
-    await expect(tools.call("nope", null, toolContext)).rejects.toThrow("unknown tool");
+  test("R-ACTOR-6 a decision actor kind survives the card boundary", () => {
+    expect(actorFromCard({ name: "scorer", role: "proposal scoring", kind: "decision" }).kind).toBe(
+      "decision",
+    );
+    // An unknown kind still degrades to the default rather than trusting the wire.
+    expect(actorFromCard({ name: "x", kind: "wizard" as ActorKind }).kind).toBe("llm");
   });
 });

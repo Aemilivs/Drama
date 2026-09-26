@@ -29,6 +29,7 @@ Run everything with `bun test`.
 | R-ACTOR-3 | A plain-text model reply still yields a well-formed artifact. | Chat returns a bare string → one artifact of the actor's expected kind, attributed to the actor. |
 | R-ACTOR-4 | A custom parser can produce structured artifacts. | Chat returns JSON, parser builds an object-valued artifact. |
 | R-ACTOR-5 | Tools are callable by name and unknown tools fail loudly. | Registry doubles a number; a missing tool rejects with `unknown tool`. |
+| R-ACTOR-6 | A decision actor kind survives the card boundary. | `kind: "decision"` is kept; an unknown kind still degrades to the default. |
 
 ## Casting — `test/requirements/casting.requirements.test.ts`
 
@@ -50,6 +51,19 @@ Run everything with `bun test`.
 | R-EVAL-6 | Actor failures become issues and default the diagnosis to `bad_execution`. | Failing criterion plus a failure record → `reperform`, issue names the actor and error. |
 | R-EVAL-7 | A `finish` recommendation cannot survive a non-passing status. | Evaluator reports `fail` + `finish` → action becomes `reperform`. |
 | R-EVAL-8 | Diagnosed gaps survive normalisation. | `missingCapabilities` / `missingInformation` present on the result. |
+
+## Calibration — `test/requirements/calibration.requirements.test.ts`
+
+A calibrated check returns a probability; the library owns the threshold policy that turns it into a `Status`. This is the seam a decision model plugs into, without the library learning a provider.
+
+| ID | Requirement (abstract) | Concrete example |
+| --- | --- | --- |
+| R-CALIB-1 | A probability at or above the pass threshold is `pass`. | `calibrate(0.9)` and `calibrate(0.8)` are `pass`. |
+| R-CALIB-2 | A probability at or below the fail threshold is `fail`. | `calibrate(0.1)` and `calibrate(0.2)` are `fail`. |
+| R-CALIB-3 | A probability between the thresholds settles nothing. | `calibrate(0.5)` is `uncertain`. |
+| R-CALIB-4 | A non-finite or out-of-range probability never becomes `pass`. | `NaN`, `Infinity`, `-0.1`, `1.1` → `uncertain`. |
+| R-CALIB-5 | The policy moves the thresholds, and an inverted policy is inert. | `{pass:0.6, fail:0.4}` moves both; `{pass:0.2, fail:0.8}` yields `uncertain`. |
+| R-CALIB-6 | A calibrated evaluator folds into `aggregate`. | One checked criterion is `pass`; the unevaluated one stays `uncertain`, so the whole evaluation is `uncertain`. |
 
 ## Orchestration — `test/requirements/orchestration.requirements.test.ts`
 
@@ -248,6 +262,11 @@ Provider adapters live in `examples/providers/`, not in the library: drama carri
 | R-ANTHROPIC-8 | A missing or malformed store means no credential, never an error. | absent file, non-JSON, `{}`, a string entry → `source: "none"`, `anthropicFromEnv` undefined. |
 | R-ANTHROPIC-9 | An oauth entry uses its access token, and the store path is overridable. | `{ type: "oauth", access }` → `authToken`; `XDG_DATA_HOME` honoured; another provider's entry ignored. |
 | R-ANTHROPIC-10 | The Claude Code token is the last resort, never the first. | `CLAUDE_CODE_OAUTH_TOKEN` → source `claude-code-token`; a bearer token beats an API key; an API key and the host store both beat the token. |
+| R-KEV-1 | The request is a System One call, and a `choice` answer normalises. | `POST /v1/systemone` with `state`/`model`/`questions`; `{ choice, confidence, probabilities }` → one distribution with `top`. |
+| R-KEV-2 | `noul` and `score` answers normalise, and a non-2xx throws. | `{ noul: 0.93 }` → `{ yes, no }`; a `score` keeps its mean; `422` → `"Kev 422: …"`. |
+| R-KEV-3 | `decisionFromEnv` needs a base URL, and a Kev answer becomes a drama `Status`. | No env and no config → `undefined`; the setup config is read; a `0.9` choice drives `calibratedEvaluator` to `pass`. |
+
+`bun run setup:kev` is the host-side installer these tests do not run: it clones Kev, syncs it with `uv sync --extra serve`, starts the server, smoke-tests it through this adapter, and writes `~/.cache/drama/kev.json` so `decisionFromEnv` needs no environment variable. It installs nothing into `src/`.
 
 ## Parallel steps — `test/requirements/parallel.requirements.test.ts`
 

@@ -155,6 +155,72 @@ export function criterionEvaluator(checks: CriterionCheck[]): EvaluatorFn {
   };
 }
 
+/**
+ * A criterion check that returns a *probability* rather than a status.
+ *
+ * A decision model (or any calibrated judge) answers a typed question with a
+ * probability; drama owns the policy that turns it into a `Status`, so the
+ * library stays provider-free and the host supplies only the function.
+ */
+export interface CalibratedCheckResult {
+  /** The check's probability that the criterion passes, in [0, 1]. */
+  probability: number;
+  evidence: string;
+}
+
+export interface CalibratedCheck {
+  criterion: Criterion;
+  check: (ctx: EvaluationContext) => CalibratedCheckResult | Promise<CalibratedCheckResult>;
+}
+
+export interface CalibrationPolicy {
+  /** At or above this probability the criterion passes. Default 0.8. */
+  pass?: number;
+  /** At or below this probability the criterion fails. Default 0.2. */
+  fail?: number;
+}
+
+function threshold(value: unknown, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1
+    ? value
+    : fallback;
+}
+
+/**
+ * Map a calibrated probability onto drama's three-valued status.
+ *
+ * A probability outside [0, 1], a non-finite one, or an inverted policy settles
+ * nothing and is `uncertain` — never rounded up to `pass`.
+ */
+export function calibrate(probability: number, policy: CalibrationPolicy = {}): Status {
+  const pass = threshold(policy.pass, 0.8);
+  const fail = threshold(policy.fail, 0.2);
+  if (!(fail < pass)) return "uncertain";
+  if (!Number.isFinite(probability) || probability < 0 || probability > 1) return "uncertain";
+  if (probability >= pass) return "pass";
+  if (probability <= fail) return "fail";
+  return "uncertain";
+}
+
+/** Build an evaluator from one calibrated check per criterion. */
+export function calibratedEvaluator(
+  checks: CalibratedCheck[],
+  policy: CalibrationPolicy = {},
+): EvaluatorFn {
+  return async (ctx) => {
+    const results: CriterionResult[] = [];
+    for (const { criterion, check } of checks) {
+      const outcome = await check(ctx);
+      results.push({
+        criterion: criterion.id,
+        status: calibrate(outcome.probability, policy),
+        evidence: outcome.evidence,
+      });
+    }
+    return aggregate(ctx.scene, results, { failures: ctx.failures });
+  };
+}
+
 export function normalizeEvaluation(value: Evaluation, ctx: EvaluationContext): Evaluation {
   const criteria: CriterionResult[] = (value.criteria ?? []).map((result) => ({ ...result }));
   const issues: string[] = [...(value.issues ?? [])];

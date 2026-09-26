@@ -105,6 +105,9 @@ export type {
   CriterionResult,
   CriterionCheck,
   CriterionCheckResult,
+  CalibratedCheck,
+  CalibratedCheckResult,
+  CalibrationPolicy,
   EvaluatorFn,
   ActorFailure,
 } from "./evaluation";
@@ -112,6 +115,8 @@ export {
   Evaluator,
   aggregate,
   criterionEvaluator,
+  calibratedEvaluator,
+  calibrate,
   normalizeEvaluation,
   actionForDiagnosis,
 } from "./evaluation";

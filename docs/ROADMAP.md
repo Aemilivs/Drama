@@ -36,6 +36,14 @@ Core primitive complete and tested.
 
 Nothing is planned. The three items above were the deferred list; each is now done or explicitly not required. What would justify new work is a concrete scene that the framework cannot express today.
 
+## Decision models — built, and explicitly bounded
+
+- [x] The calibration policy: `calibrate` / `calibratedEvaluator` in `src/evaluation.ts` (`R-CALIB-1..6`), plus a `"decision"` `ActorKind` (`R-ACTOR-6`).
+- [x] The host-side path: `examples/providers/kev.ts` (a System One `DecisionFn` over plain `fetch`) and `bun run setup:kev`, which installs, starts and verifies a local Kev, then writes the config `decisionFromEnv` reads (`R-KEV-1..3`).
+- [x] The research and the executed performance: [`decision-models.md`](decision-models.md), [`examples/decision-models/run.ts`](../examples/decision-models/run.ts).
+
+Deliberately not built: no provider client or `Distribution` type in `src/`, and no "supported decision models" list — the contract is the wire format.
+
 ## Explicit non-goals
 
 - No persistence layer, scheduler, or queue.

@@ -11,7 +11,7 @@ import { nextId } from "./types";
 import type { Scene } from "./scene";
 import type { Persona } from "./persona";
 
-export type ActorKind = "llm" | "deterministic" | "tool";
+export type ActorKind = "llm" | "deterministic" | "decision" | "tool";
 
 export interface ToolCall {
   tool: string;

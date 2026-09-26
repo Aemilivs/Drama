@@ -15,5 +15,5 @@
     "allowImportingTsExtensions": true,
     "isolatedModules": true
   },
-  "include": ["src", "test", "examples", ".opencode"]
+  "include": ["src", "test", "examples", ".opencode", "scripts"]
 }

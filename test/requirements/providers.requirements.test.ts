@@ -5,13 +5,21 @@ import { describe, expect, test } from "bun:test";
 import {
   Evaluator,
   StageManager,
+  calibratedEvaluator,
   createActor,
   createCast,
   createLlmExecutor,
   createProtocol,
   criterionEvaluator,
+  deriveMinimalCast,
   sceneFromCard,
 } from "../../src/index.ts";
+import {
+  KEV_DEFAULT_BASE_URL,
+  createKevDecision,
+  decisionFromEnv,
+  readKevConfig,
+} from "../../examples/providers/kev.ts";
 import {
   ANTHROPIC_BASE_URL,
   ANTHROPIC_DEFAULT_MAX_TOKENS,
@@ -307,5 +315,164 @@ describe("Anthropic adapter requirements", () => {
     );
     expect(overStore.source).toBe("opencode-auth");
     expect(overStore.apiKey).toBe("host-key");
+  });
+});
+
+
+interface FakeKevOptions {
+  status?: number;
+  body?: unknown;
+}
+
+function fakeKev(options: FakeKevOptions = {}) {
+  const calls: { url: string; init?: RequestInit }[] = [];
+  const fetchImpl = (async (url: string | URL | Request, init?: RequestInit) => {
+    calls.push({ url: String(url), init });
+    if (options.status && options.status >= 400) {
+      return new Response(JSON.stringify(options.body ?? { detail: "bad request" }), {
+        status: options.status,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    // A real server answers whatever question ids the request carries.
+    const request = JSON.parse(String(init?.body ?? "{}")) as {
+      questions?: Record<string, { type?: string }>;
+    };
+    const answers: Record<string, unknown> = {};
+    for (const [id, question] of Object.entries(request.questions ?? {})) {
+      if (question.type === "noul") {
+        answers[id] = { type: "noul", noul: 0.93 };
+      } else if (question.type === "score") {
+        answers[id] = {
+          type: "score",
+          score: 1.44,
+          confidence: 0.34,
+          probabilities: { "0": 0, "1": 0.56, "2": 0.44 },
+        };
+      } else {
+        answers[id] = {
+          type: "choice",
+          choice: "pass",
+          confidence: 0.2,
+          probabilities: { pass: 0.9, fail: 0.1 },
+        };
+      }
+    }
+    return new Response(
+      JSON.stringify({
+        model: "kev-latest",
+        answers,
+        usage: { input_tokens: 10, output_tokens: 5 },
+      }),
+      { status: 200, headers: { "content-type": "application/json" } },
+    );
+  }) as unknown as typeof fetch;
+  return { fetchImpl, calls };
+}
+
+/** A path that never exists, so a test cannot read a real Kev config. */
+const NO_KEV_CONFIG = join(tmpdir(), "drama-no-such-kev-config.json");
+
+describe("Kev adapter requirements", () => {
+  test("R-KEV-1 the request is a System One call, and a choice answer normalises", async () => {
+    const { fetchImpl, calls } = fakeKev();
+    const decision = createKevDecision({
+      baseUrl: "http://127.0.0.1:8009/",
+      model: "kev-latest",
+      fetch: fetchImpl,
+    });
+
+    const answers = await decision({
+      state: "the proposal",
+      questions: { q: { type: "choice", instructions: "?", criteria: { pass: "ok", fail: "no" } } },
+    });
+
+    expect(calls[0]!.url).toBe(`${KEV_DEFAULT_BASE_URL}/v1/systemone`);
+    expect(calls[0]!.init!.method).toBe("POST");
+    const body = JSON.parse(String(calls[0]!.init!.body)) as Record<string, unknown>;
+    expect(body.state).toBe("the proposal");
+    expect(body.model).toBe("kev-latest");
+    expect(answers.q).toEqual({
+      type: "choice",
+      probabilities: { pass: 0.9, fail: 0.1 },
+      confidence: 0.2,
+      top: "pass",
+    });
+  });
+
+  test("R-KEV-2 noul and score answers normalise, and a non-2xx throws", async () => {
+    const { fetchImpl } = fakeKev();
+    const answers = await createKevDecision({
+      baseUrl: KEV_DEFAULT_BASE_URL,
+      fetch: fetchImpl,
+    })({
+      state: "s",
+      questions: { escalate: { type: "noul" }, quality: { type: "score", criteria: ["a", "b", "c"] } },
+    });
+    expect(answers.escalate!.probabilities.yes).toBe(0.93);
+    expect(answers.escalate!.top).toBe("yes");
+    expect(answers.quality!.top).toBe("1.44");
+
+    const failing = fakeKev({ status: 422, body: { detail: "bad question" } });
+    await expect(
+      createKevDecision({ baseUrl: KEV_DEFAULT_BASE_URL, fetch: failing.fetchImpl })({
+        state: "s",
+        questions: {},
+      }),
+    ).rejects.toThrow("Kev 422");
+  });
+
+  test("R-KEV-3 decisionFromEnv needs a base URL, and a Kev answer becomes a drama Status", async () => {
+    expect(decisionFromEnv({}, { configPath: NO_KEV_CONFIG })).toBeUndefined();
+    expect(decisionFromEnv({ KEV_BASE_URL: "http://127.0.0.1:8009" }, { configPath: NO_KEV_CONFIG }))
+      .toBeFunction();
+
+    // The setup command's config is read, and junk is simply "not configured".
+    const dir = mkdtempSync(join(tmpdir(), "drama-kev-"));
+    const configPath = join(dir, "kev.json");
+    writeFileSync(configPath, JSON.stringify({ baseUrl: KEV_DEFAULT_BASE_URL, model: "kev-latest" }));
+    expect(readKevConfig(configPath)?.baseUrl).toBe(KEV_DEFAULT_BASE_URL);
+    expect(decisionFromEnv({}, { configPath })).toBeFunction();
+    writeFileSync(configPath, "not json");
+    expect(readKevConfig(configPath)).toBeUndefined();
+
+    // The point of the adapter: a Kev probability drives the library's Status.
+    const { fetchImpl } = fakeKev();
+    const decision = createKevDecision({ baseUrl: KEV_DEFAULT_BASE_URL, fetch: fetchImpl });
+    const scene = sceneFromCard({
+      objective: "o",
+      success_criteria: ["c"],
+      required_capabilities: ["a"],
+    });
+    const criterion = scene.successCriteria[0]!;
+    const evaluator = new Evaluator(
+      calibratedEvaluator([
+        {
+          criterion,
+          check: async () => {
+            const answers = await decision({
+              state: "the artifact",
+              questions: {
+                [criterion.id]: {
+                  type: "choice",
+                  instructions: "?",
+                  criteria: { pass: "ok", fail: "no" },
+                },
+              },
+            });
+            const answer = answers[criterion.id]!;
+            return { probability: answer.probabilities.pass ?? 0, evidence: `kev ${answer.top}` };
+          },
+        },
+      ]),
+    );
+    const evaluation = await evaluator.evaluate({
+      scene,
+      cast: deriveMinimalCast(scene),
+      artifacts: [],
+      failures: [],
+      iteration: 1,
+    });
+    expect(evaluation.status).toBe("pass");
   });
 });

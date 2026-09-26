@@ -343,7 +343,10 @@ export function actorFromCard(card: ActorCard): Actor {
   const name =
     typeof source.name === "string" && source.name.length > 0 ? source.name : "actor";
   const kind =
-    source.kind === "llm" || source.kind === "deterministic" || source.kind === "tool"
+    source.kind === "llm" ||
+    source.kind === "deterministic" ||
+    source.kind === "decision" ||
+    source.kind === "tool"
       ? source.kind
       : undefined;
   return createActor({
