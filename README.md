@@ -4,7 +4,7 @@
 scene, cast the smallest troupe that can carry it, and let the result emerge from their
 interaction.
 
-`zero runtime dependencies` · `220 tests` · `TypeScript on Bun` · `MIT`
+`zero runtime dependencies` · `229 tests` · `TypeScript on Bun` · `MIT`
 
 ```text
 Traditional                          Scene-Casting
@@ -160,12 +160,12 @@ The difference is one actor whose local objective is to *falsify* the others.
 
 ```bash
 bun install          # dev types only (TypeScript, @types/bun, @opencode-ai/plugin)
-bun test             # 220 tests
+bun test             # 229 tests
 bun run example      # the end-to-end incident performance
 bun run typecheck    # tsc --noEmit
 ```
 
-Three runnable examples, all offline by default:
+Runnable examples, all offline by default:
 
 | Example | What it shows |
 | --- | --- |
@@ -173,6 +173,7 @@ Three runnable examples, all offline by default:
 | [`examples/audition/run.ts`](examples/audition/run.ts) | a recorded casting call against three real agents |
 | [`examples/llm/run.ts`](examples/llm/run.ts) | the production LLM path (self-explains when unconfigured) |
 | [`examples/anthropic/run.ts`](examples/anthropic/run.ts) | the same production, on Claude |
+| [`examples/decision-models/run.ts`](examples/decision-models/run.ts) | a decision model as a calibrated evaluator, and a `decision` actor |
 
 ### Use it as a library
 
@@ -291,6 +292,81 @@ Both adapters are plain `fetch` with no dependency and live side by side in
 [`examples/providers/`](examples/providers) — they are recipes to copy, not code the library carries,
 which is why drama still ships no provider integrations of its own.
 
+### Use a decision model (Kev)
+
+A **decision model** answers typed questions about a document with calibrated probabilities and
+**no generated text** — TypeSafe's System One shape. It is neither an LLM actor nor a deterministic
+step: it is a *judgement with a confidence*. drama maps that confidence onto its three-valued
+`Status` with [`calibrate`/`calibratedEvaluator`](src/evaluation.ts) (a probability of 0.55 settles
+nothing and stays `uncertain`), and a card may declare `kind: "decision"` so a stored cast is honest
+about it.
+
+**Kev** ([jaredpalmer/kev](https://github.com/jaredpalmer/kev), Apache-2.0) is the open-source
+implementation; **Jev** is TypeSafe's hosted original. One optional command installs, starts and
+verifies a local Kev and writes the config that `decisionFromEnv()` reads — so no environment
+variable is needed afterwards:
+
+```bash
+bun run setup:kev            # install if missing, start, smoke-test, write ~/.cache/drama/kev.json
+bun run setup:kev --check    # report whether Kev is present and running; change nothing
+bun run setup:kev --smoke    # verify a running server and rewrite the config
+bun run examples/decision-models/run.ts
+```
+
+Compatibility is checked for you: `setup:kev` sends a real System One request (a `choice`, a `noul`
+and a `score`) **through drama's own adapter**, [`examples/providers/kev.ts`](examples/providers/kev.ts).
+It is a no-op when Kev already answers. Nothing in drama depends on it: with no Kev the decision
+models example falls back to its stub, so the repository stays offline by default.
+
+```ts
+import { Evaluator, calibratedEvaluator } from "drama";
+import { decisionFromEnv } from "./examples/providers/kev.ts";
+
+const decision = decisionFromEnv();   // Kev, or undefined when it is not installed
+const evaluator = new Evaluator(calibratedEvaluator(
+  scene.successCriteria.map((criterion) => ({
+    criterion,
+    check: async () => {
+      const answers = await decision!({          // the Kev at KEV_BASE_URL, default 127.0.0.1:8009
+        state: serializedArtifacts,
+        questions: { [criterion.id]: {
+          type: "choice",
+          instructions: `Does the artifact meet this criterion? ${criterion.description}`,
+          criteria: { pass: "it meets it", fail: "it does not" },
+        } },
+      });
+      // 0.8 / 0.2 are the default thresholds; anything between them stays `uncertain`.
+      return { probability: answers[criterion.id]!.probabilities.pass ?? 0, evidence: "Kev" };
+    },
+  })),
+));
+```
+
+#### What Kev needs
+
+| Requirement | Detail |
+| --- | --- |
+| Python | `>=3.12,<3.14` — 3.12 or 3.13; **not 3.14** (torch has no wheels for it) |
+| Tools | `git` and [`uv`](https://docs.astral.sh/uv/) |
+| Base dependencies | `torch>=2.6,<2.9`, `transformers>=5.17,<6`, `peft`, `accelerate`, `datasets`, `scikit-learn`, `numpy`, `pydantic` |
+| Serving extra | `fastapi`, `uvicorn`, `typesafe-sdk`, and `mlx-lm` on Apple Silicon (`uv sync --extra serve`) |
+| Network + disk | the first start downloads the checkpoint and its base model |
+| Accelerator | Apple Silicon via MLX (automatic), or a CUDA/ROCm GPU (`flash-linear-attention` recommended on CUDA) |
+
+#### Pick a checkpoint
+
+| Model | Runs on | Weights |
+| --- | --- | --- |
+| **Kev-0.8B** — `setup:kev` default | any Apple Silicon Mac, L4 | ~1.6 GB |
+| Kev-4B | 32 GB Mac, L40S, H100 | ~8 GB |
+| Kev-9B | 32 GB Mac, L40S, H100 (~17 GB VRAM) | ~18 GB |
+| Kev-27B | 80 GB GPU (B200/H200/H100); no Mac path | ~55 GB |
+
+`setup:kev` serves the laptop-scale Kev-0.8B; override with `--checkpoint jaredpalmer/kev-4b`,
+`--port`, `--dir`, or point `KEV_BASE_URL` at a server you already run. The research, the failure
+modes to expect (counting, dates, long context) and why the integration is this small are in
+[`docs/decision-models.md`](docs/decision-models.md).
+
 ### Bring your own engine
 
 An actor needs one thing — an `executor` — so **no framework is specially supported and all of
@@ -349,9 +425,9 @@ src/
   trace.ts       formatPerformance, performanceTimeline
   index.ts       public surface
 .opencode/       skills, project tool, audition libraries
-examples/        incident-rca · audition · llm · anthropic · providers
+examples/        incident-rca · audition · llm · anthropic · decision-models · providers
 test/            behavioural tests and formalized requirements
-docs/            architecture · actors · engines · graph-engineering · install · prior-art · requirements · ROADMAP
+docs/            architecture · actors · decision-models · engines · graph-engineering · install · prior-art · requirements · ROADMAP
 ```
 
 ### Testing
@@ -392,6 +468,7 @@ accepted broken shapes, and a fake edge in the flagship example.
 - [`docs/architecture.md`](docs/architecture.md) — module map, dependency direction, data flow.
 - [`docs/install.md`](docs/install.md) — installing into OpenCode, host-wide or per project, with a verification step.
 - [`docs/actors.md`](docs/actors.md) — roles vs personas, the casting call, the refusal cache.
+- [`docs/decision-models.md`](docs/decision-models.md) — Jev, Kev and the calibrated judgement layer, with its failure modes.
 - [`docs/graph-engineering.md`](docs/graph-engineering.md) — how drama maps to the task-graph discipline.
 - [`docs/engines.md`](docs/engines.md) — using LangGraph, the OpenAI Agents SDK, Google ADK, CrewAI or Mastra as an actor.
 - [`docs/prior-art.md`](docs/prior-art.md) — the five most-used frameworks, compared, and why there are no native adapters.
