@@ -52,15 +52,26 @@ export interface IterationRecord {
 
 /**
  * How a performance ended. `aborted` is its own outcome rather than a flavour of
- * `failed`: nothing went wrong, the caller stopped asking for work.
+ * `failed`: nothing went wrong, the caller stopped asking for work. `paused` is
+ * the same idea for a gate — nobody was there to answer it, so the show waits
+ * instead of failing, and `resume` picks it up where it stopped.
  */
-export type PerformanceStatus = "done" | "failed" | "aborted";
+export type PerformanceStatus = "done" | "failed" | "aborted" | "paused";
+
+/** The gate a paused performance is waiting on. */
+export interface PendingGate {
+  iteration: number;
+  step: string;
+  actor: string;
+}
 
 export interface PerformanceResult {
   status: PerformanceStatus;
   reason: string;
   artifacts: Artifact[];
   evaluation: Evaluation | null;
+  /** Set only when `status` is `paused`: where the show stopped. */
+  gate?: PendingGate;
 }
 
 export interface Performance {
@@ -314,18 +325,45 @@ export class StageManager {
     castInput: Cast,
     options: StageOptions = {},
   ): Promise<Performance> {
+    return this.runPerformance(sceneInput, castInput, options);
+  }
+
+  /**
+   * Continue a performance that paused at a gate. The approval is whatever the
+   * approver now answers: supply `approve` and the show runs on to its end. A
+   * paused performance reloaded from JSON also needs `executors`, for the same
+   * reason a replay does. Resuming with no approver simply pauses again, so the
+   * fail-closed behaviour survives an indefinite wait.
+   */
+  async resume(performance: Performance, options: StageOptions = {}): Promise<Performance> {
+    const gate = performance.finalResult?.gate;
+    if (performance.finalResult?.status !== "paused" || !gate) {
+      throw new Error("this performance is not paused at a gate");
+    }
+    return this.runPerformance(performance.scene, performance.cast, options, {
+      performance,
+      gate,
+    });
+  }
+
+  private async runPerformance(
+    sceneInput: Scene,
+    castInput: Cast,
+    options: StageOptions = {},
+    seed?: { performance: Performance; gate: PendingGate },
+  ): Promise<Performance> {
     const opts = { ...this.defaults, ...options };
-    const performanceId = nextId("performance");
+    const performanceId = seed?.performance.id ?? nextId("performance");
 
-    let scene = sceneInput;
-    let cast = castInput;
+    let scene = seed?.performance.scene ?? sceneInput;
+    let cast = seed?.performance.cast ?? castInput;
 
-    const casts: Cast[] = [];
-    const scenes: Scene[] = [scene];
-    const iterations: IterationRecord[] = [];
-    const turns: ActorTurn[] = [];
-    const artifacts: Artifact[] = [];
-    const events: StageEvent[] = [];
+    const casts: Cast[] = seed ? seed.performance.casts.slice() : [];
+    const scenes: Scene[] = seed ? seed.performance.scenes.slice() : [scene];
+    const iterations: IterationRecord[] = seed ? seed.performance.iterations.slice() : [];
+    const turns: ActorTurn[] = seed ? seed.performance.turns.slice() : [];
+    const artifacts: Artifact[] = seed ? seed.performance.artifacts.slice() : [];
+    const events: StageEvent[] = seed ? seed.performance.events.slice() : [];
 
     const emit = (event: StageEvent) => {
       events.push(event);
@@ -356,20 +394,25 @@ export class StageManager {
       artifacts: [],
       evaluation: null,
     };
-    let performances = 0;
+    // A resumed performance restarts at the iteration it paused in.
+    let performances = seed ? seed.gate.iteration - 1 : 0;
     let recasts = 0;
     let redesigns = 0;
     // The initial cast is attempt 1; the first recast is attempt 2.
     let castAttempt = 1;
 
-    emit({
-      type: "cast_selected",
-      castId: cast.id,
-      actors: cast.actors.map((actor) => actor.name),
-      rationale: cast.rationale,
-    });
-    cast = await dress(cast);
-    casts.push(cast);
+    // A resumed performance keeps the cast it paused with: dressing it again
+    // would re-audition roles that are already bound.
+    if (!seed) {
+      emit({
+        type: "cast_selected",
+        castId: cast.id,
+        actors: cast.actors.map((actor) => actor.name),
+        rationale: cast.rationale,
+      });
+      cast = await dress(cast);
+      casts.push(cast);
+    }
 
     while (performances < this.maxPerformances) {
       performances += 1;
@@ -387,10 +430,29 @@ export class StageManager {
           ? opts.maxConcurrency
           : Number.POSITIVE_INFINITY
         : 1;
-      const remaining = [...cast.protocol.steps];
+      // In the iteration a resume lands in, the turns already recorded are the
+      // cursor: skip those steps, and rebuild what they produced.
+      const resuming = seed !== undefined && iterationIndex === seed.gate.iteration;
+      const remaining = resuming
+        ? cast.protocol.steps.filter(
+            (step) =>
+              !turns.some(
+                (turn) => turn.iteration === iterationIndex && turn.step === step.id,
+              ),
+          )
+        : [...cast.protocol.steps];
       const produced = new Set<string>();
+      if (resuming) {
+        for (const step of cast.protocol.steps) {
+          const done = turns.some(
+            (turn) => turn.iteration === iterationIndex && turn.step === step.id,
+          );
+          if (done) for (const kind of step.produces) produced.add(kind);
+        }
+      }
       let halted = false;
       let canceled = false;
+      let paused = false;
 
       while (remaining.length > 0 && !halted) {
         // Cancellation is checked between waves: whatever is already running is
@@ -448,6 +510,26 @@ export class StageManager {
             continue;
           }
           const gatedActor = cast.actors.find((candidate) => candidate.name === step.actor);
+          // No approver at all means nobody was there to ask. A required gate then
+          // pauses the show, so the approval can arrive later, rather than failing
+          // a step that was never denied. A denial (an approver answering false)
+          // still halts, and an optional gate stays skippable.
+          if (!opts.approve && !step.optional) {
+            result = {
+              status: "paused",
+              reason: `gate on step "${step.id}" is waiting for an approver`,
+              artifacts: artifacts.slice(),
+              evaluation: null,
+              gate: { iteration: iterationIndex, step: step.id, actor: step.actor },
+            };
+            emit({
+              type: "finished",
+              status: "paused",
+              reason: result.reason,
+            });
+            paused = true;
+            break;
+          }
           const approved = await this.approve(
             { iteration: iterationIndex, step, actor: gatedActor, scene },
             opts,
@@ -473,6 +555,7 @@ export class StageManager {
           });
           if (!step.optional) gateHalted = true;
         }
+        if (paused) break;
         if (gateHalted) {
           halted = true;
           break;
@@ -624,6 +707,12 @@ export class StageManager {
       // A canceled performance never reaches evaluation: judging a show the caller
       // already stopped would only produce a decision nobody asked for.
       if (canceled) break;
+      // Neither does a paused one. The iteration is recorded as far as it got, and
+      // the decision waits for whoever opens the gate in `resume`.
+      if (paused) {
+        iterations.push(record);
+        break;
+      }
       const evaluation = await this.evaluator.evaluate({
         scene,
         cast,

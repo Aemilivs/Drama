@@ -24,6 +24,8 @@ Derived while building `drama`. Keep this file current as new principles are fou
 - Recasting must preserve a correct attempt counter: the initial cast is attempt 1, so the first recast is attempt 2.
 - Minimality is enforced: an actor that is never activated, or whose capabilities are already covered and whose output is never consumed, is flagged.
 - All loops are bounded by explicit budgets.
+- A gate nobody is there to answer **pauses** the show (`status: "paused"`, `finalResult.gate`); a *denial* — an approver answering false, or throwing — halts it. Resuming with nobody to answer pauses again, so an unanswered gate is never a pass. `resume` continues the same performance (same id, earlier turns kept) rather than starting a new show.
+- A declared artifact content contract is enforced by the LLM path: a mismatch is a **failed turn** carrying the artifact kind and the failing path, and the artifacts are kept as evidence. It is opt-in — an actor without a contract behaves exactly as before.
 
 ## Testing
 

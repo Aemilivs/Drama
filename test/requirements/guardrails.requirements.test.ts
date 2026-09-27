@@ -70,7 +70,7 @@ describe("Graph guardrail requirements", () => {
     });
   });
 
-  test("R-GUARD-2 with no approver the gate fails closed and nothing runs", async () => {
+  test("R-GUARD-2 with no approver at all a required gate pauses and nothing runs", async () => {
     const s = scene();
     const cast = createCast(
       [worker("x", "X")],
@@ -81,9 +81,38 @@ describe("Graph guardrail requirements", () => {
       maxPerformances: 1,
     }).perform(s, cast);
 
-    expect(performance.finalResult.status).toBe("failed");
+    // Fail-closed still holds: nothing was admitted, and the show is not done.
+    expect(performance.finalResult.status).toBe("paused");
+    expect(performance.finalResult.gate).toEqual({
+      iteration: 1,
+      step: "step-1",
+      actor: "x",
+    });
     expect(performance.turns).toHaveLength(0);
     expect(performance.artifacts).toHaveLength(0);
+    expect(
+      performance.events.some(
+        (event) => event.type === "finished" && event.status === "paused",
+      ),
+    ).toBe(true);
+  });
+
+  test("R-GUARD-11 a denial halts and is not a pause, even for a required gate", async () => {
+    const s = scene();
+    const cast = createCast(
+      [worker("x", "X")],
+      createProtocol([{ actor: "x", instruction: "go", produces: ["X"], gate: true }]),
+    );
+    const performance = await new StageManager({
+      evaluator: evaluatorFor(s),
+      approve: () => false,
+      maxPerformances: 1,
+    }).perform(s, cast);
+
+    // An approver was present and said no — that is a decision, not a wait.
+    expect(performance.finalResult.status).not.toBe("paused");
+    expect(performance.finalResult.gate).toBeUndefined();
+    expect(performance.turns).toHaveLength(0);
     expect(
       performance.events.some(
         (event) => event.type === "gate" && event.approved === false,

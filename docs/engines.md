@@ -254,8 +254,8 @@ of the run and **never written to a checkpoint**, so it comes back empty after a
 **This is a recipe, not an integration.** It adds nothing to `src/`, and it does **not** close
 `drama-gas.6`. Persisting a performance *under* an engine's checkpointer — resuming a drama
 performance from the engine's snapshot — is "a specific project with a concrete requirement" that
-[`prior-art.md`](prior-art.md) defers (`prior-art.md:115-116`); `drama-gas.6` implements drama's own
-gate-boundary resume instead.
+[`prior-art.md`](prior-art.md) defers (`prior-art.md:115-116`); `drama-gas.6` implements drama's own gate-boundary resume instead (`StageManager.resume`, pausing at a
+`gate: true` step when nobody is there to answer it).
 
 Sources: `StageManager.run` and its `RunOutcome` union — `src/stage.ts:289-309`; the `needs_input`
 predicate — `src/scene.ts:305-311`; node and tool shapes —

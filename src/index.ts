@@ -147,6 +147,7 @@ export type {
   GateRequest,
   Approver,
   PerformanceStatus,
+  PendingGate,
 } from "./stage";
 export { StageManager } from "./stage";
 

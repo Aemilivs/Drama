@@ -18,7 +18,7 @@ import type { Performance } from "./stage";
 import { ownEntry } from "./types";
 
 export const PERFORMANCE_FORMAT = "drama.performance";
-export const PERFORMANCE_FORMAT_VERSION = 1;
+export const PERFORMANCE_FORMAT_VERSION = 2;
 
 export interface PerformanceDocument {
   format: typeof PERFORMANCE_FORMAT;

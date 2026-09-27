@@ -19,7 +19,7 @@ touches routing.
 | **Diverse skeptics** | `stance.opposes` / `toYield` express designed opposition; the casting skill requires *different questions* per verifier. | ✅ doctrine, skill-enforced |
 | **Stop rule: split only what never reads each other** | Casts are derived per scene and must be the minimal sufficient set; `minimality` reports removable actors; `parallel` is opt-in, so sequential work stays sequential. | ✅ |
 | **Never merge without one owner** | `deriveMinimalCast` adds a synthesizer; `no_merge_owner` warns when several actors produce terminal artifacts. | ✅ |
-| **Human gate on irreversible edges** | `ProtocolStep.gate` + `StageOptions.approve`; gates **fail closed** (no approver, a throw, or a false all deny) and a trace event records the decision. | ✅ |
+| **Human gate on irreversible edges** | `ProtocolStep.gate` + `StageOptions.approve`; a denial (an approver answering false, or throwing) halts, and with nobody to ask at all the show **pauses** instead of failing — `resume` opens it later. A trace event records every decision. | ✅ |
 | **Judge on numbers that cannot argue back** | `criterionEvaluator` checks artifacts deterministically; the casting skill prefers a test runner or compiler as verifier. The serialized `Performance` is the record. | ✅ |
 | **Guardrail 1 — every loop has a maximum** | `maxPerformances` (reperform), `maxRecasts`, `maxRedesigns`, `maxTurns`. | ✅ |
 | **Guardrail 2 — one writer per file** | `ProtocolStep.owns`; `owns_conflict` rejects overlapping globs inside a wave. | ✅ |

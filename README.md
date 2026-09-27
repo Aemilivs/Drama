@@ -265,6 +265,26 @@ object{risks: array<string>, mitigation: string}`), so a model can comply rather
 are **opt-in**: an actor without one behaves exactly as before. A mismatch fails the turn and keeps
 the artifacts — a validation failure is evidence, not a thrown exception.
 
+### Pause a performance at a gate
+
+A step with `gate: true` is irreversible, so it needs an explicit yes. With no approver at all there
+is nobody to ask, and the show **pauses** rather than failing — the paused state is an ordinary
+`Performance`, so the existing serialization stores it and `resume` picks it up later:
+
+```ts
+const paused = await stage.perform(scene, cast, { executors });
+paused.finalResult.status;   // "paused"
+paused.finalResult.gate;     // { iteration: 1, step: "step-2", actor: "deploy" }
+
+// ...later, perhaps in another process:
+const stored = serializePerformance(paused);
+const reloaded = deserializePerformance(stored, { executors });
+const done = await stage.resume(reloaded, { executors, approve: () => true });
+```
+
+A denial is not a wait: an approver that answers `false`, or throws, still halts the show. And
+resuming with nobody to answer pauses again — so an unanswered gate can never quietly become a pass.
+
 ### Wire in a real model
 
 Any model enters through one function; non-LLM actors need no adapter at all:

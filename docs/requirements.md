@@ -303,7 +303,7 @@ Borrowed from the `/graph` task-graph runner, which already enforced them: a hum
 | ID | Requirement (abstract) | Concrete example |
 | --- | --- | --- |
 | R-GUARD-1 | An approved gate lets the step run and is traced. | `approve: () => true` → done; a `gate` event with `approved: true`. |
-| R-GUARD-2 | With no approver the gate fails closed and nothing runs. | No `approve` → no turns, no artifacts, `gate` event `approved: false`. |
+| R-GUARD-2 | With nobody to answer it a required gate pauses, and nothing runs. | No `approve` → `paused`, no turns, no artifacts, `finalResult.gate` names the step. |
 | R-GUARD-3 | A denied optional gate is skipped and the rest continues. | The gated optional step is denied; an independent step still runs → done. |
 | R-GUARD-4 | An approver that throws counts as denied. | A throwing approver → no turns executed. |
 | R-GUARD-5 | Overlapping write globs in one wave are an error. | `src/**` + `src/lib/**` in one wave → `owns_conflict`; ordered by a dependency → clean. |
@@ -312,6 +312,20 @@ Borrowed from the `/graph` task-graph runner, which already enforced them: a hum
 | R-GUARD-8 | `planWaves` previews the schedule the stage will run. | `[[step-1, step-2], [step-3]]`; with cap 1, three waves. |
 | R-GUARD-9 | An independent pair declared in sequence is reported as a fake edge. | Two `consumes: []` steps → `independent_steps`; a dependent pair → silent. |
 | R-GUARD-10 | Terminal artifacts with several owners are reported. | Two terminal producers → `no_merge_owner`; a synthesizer consuming both → silent. |
+| R-GUARD-11 | A denial halts; it is not a pause. | `approve: () => false` on a required gate → not `paused`, no `gate` field, no turns. |
+
+## Resume — `test/requirements/resume.requirements.test.ts`
+
+A gate with nobody present pauses the show instead of failing it. The paused state **is** the existing `Performance` serialization, so it can be stored and picked up later with the approval; an unresumed pause is never a pass.
+
+| ID | Requirement (abstract) | Concrete example |
+| --- | --- | --- |
+| R-RESUME-1 | A gate with nobody to answer it pauses, keeping what ran. | Ungated step → artifact and turn; gated step → `paused`, `gate` names it, evaluation null. |
+| R-RESUME-2 | Resuming with the approval runs on to completion in one trace. | `resume(paused, { approve: true })` → `done`, both artifacts, same performance id. |
+| R-RESUME-3 | The paused state is the existing serialization, and reloading resumes it. | Round-trip with `serializePerformance`; re-attach executors by name → `done`. |
+| R-RESUME-4 | Resuming with nobody to answer pauses again, so a wait never becomes a pass. | Two resumes without an approver → `paused` each time, the step never runs. |
+| R-RESUME-5 | A step that already ran is not executed again after a resume. | Executor calls are `[x, y]`, not `[x, x, y]`. |
+| R-RESUME-6 | Resuming something that is not paused is a clear error. | `resume(done)` → throws `this performance is not paused at a gate`. |
 
 ## Cancellation — `test/requirements/abort.requirements.test.ts`
 
