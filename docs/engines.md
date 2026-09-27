@@ -180,6 +180,88 @@ return { artifacts: [{ kind: "RiskReport", content: typed.object }] };
 Docs: <https://mastra.ai/docs/agents/overview>. Node 22.13+, ESM-only, no server needed for a direct
 `generate()`.
 
+## The other direction: a performance inside an engine
+
+Everything above wraps an engine as **one actor**. The reverse costs drama nothing: an engine graph
+can host a whole performance as a node or a tool, because a performance is just an async call.
+
+`StageManager.run` returns a **union**, so the node handles both shapes — a scene that is incomplete
+by design, and a finished performance:
+
+```ts
+import { Evaluator, StageManager, criterionEvaluator, formatPerformance } from "drama";
+
+const manager = new StageManager({ evaluator: new Evaluator(criterionEvaluator([...])) });
+
+// inside a graph node:
+const outcome = await manager.run(request);
+if (outcome.kind === "needs_input") {
+  // The scene is incomplete by design — `run` returns this on a blocking unknown, a
+  // contradictory constraint or a missing objective. Surface it, and let another node
+  // (or the host) supply the answers.
+  return { questions: outcome.questions };
+}
+return {
+  status: outcome.performance.finalResult.status,
+  trace: formatPerformance(outcome.performance),
+};
+```
+
+The same call as a **tool**, for an agent that should decide when a performance is worth running:
+
+```ts
+import { tool } from "langchain";        // or "@langchain/core/tools"
+import { z } from "zod";
+
+const runPerformance = tool(
+  async ({ request }) => {
+    const outcome = await manager.run(request);
+    return JSON.stringify(
+      outcome.kind === "needs_input"
+        ? { needs_input: outcome.questions }
+        : { status: outcome.performance.finalResult.status },
+    );
+  },
+  {
+    name: "run_performance",
+    description: "Run a drama performance for a request and return its status.",
+    schema: z.object({ request: z.string() }),
+  },
+);
+```
+
+A node return value is merged into the graph state, so its keys must be channels. Both branches were
+exercised through a real `StateGraph` while writing this page (`@langchain/langgraph` 1.4.18): the
+performance branch returned `done`, and the `needs_input` branch returned its question.
+
+**What the checkpointer can carry.** Compiling with a checkpointer snapshots state at every
+super-step through a JSON replacer (`JsonPlusSerializer` in `@langchain/langgraph-checkpoint`),
+checked against `1.4.18`:
+
+| In state | Kept as |
+| --- | --- |
+| `Map`, `Set`, `Error`, `Uint8Array`, `RegExp`, `undefined` | a constructor record, revived as the same type |
+| a class instance | a plain object — the prototype and its methods are gone |
+| a **function** | **dropped silently** |
+| a cycle | `"[Circular]"` |
+
+That matters here: a `Performance` is mostly plain data, but `Actor.executor` is a function —
+`serializePerformance` is the honest round-trip, and it already drops executors and re-attaches them
+by name. For a field that is runtime-only (a live client, a cache, an executor you keep in-process),
+declare it as `new UntrackedValue()` (exported from `@langchain/langgraph`): it is tracked for the life
+of the run and **never written to a checkpoint**, so it comes back empty after a restore.
+
+**This is a recipe, not an integration.** It adds nothing to `src/`, and it does **not** close
+`drama-gas.6`. Persisting a performance *under* an engine's checkpointer — resuming a drama
+performance from the engine's snapshot — is "a specific project with a concrete requirement" that
+[`prior-art.md`](prior-art.md) defers (`prior-art.md:115-116`); `drama-gas.6` implements drama's own
+gate-boundary resume instead.
+
+Sources: `StageManager.run` and its `RunOutcome` union — `src/stage.ts:289-309`; the `needs_input`
+predicate — `src/scene.ts:305-311`; node and tool shapes —
+<https://docs.langchain.com/oss/javascript/langgraph/graph-api>; `UntrackedValue` —
+`@langchain/langgraph` (`state/values/untracked`), "never checkpointed".
+
 ## What this deliberately does not do
 
 Wrapping an engine gives you **one actor**. It does not import that engine's durability, streaming,

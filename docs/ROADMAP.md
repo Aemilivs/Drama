@@ -50,7 +50,7 @@ A drama ([`examples/langgraph/run.ts`](../examples/langgraph/run.ts)) evaluated 
 
 - [x] `drama-vfu.1` — the recipe is corrected and date-stamped ([`engines.md`](engines.md) §1): `createAgent` instead of the deprecated `createReactAgent`, the real Node 20 floor, and the `msg.text` trap, with `responseFormat` / `structuredResponse` for typed content.
 - [x] `drama-vfu.2` — `bun run verify:engines`: installs the pinned LangGraph packages outside the repo, runs a real graph (fake model, no key) through the seam, and exits non-zero on drift or on an install failure. A docs-integrity checker: no dependency, and neither `tsc` nor `bun test` ever touches it.
-- [ ] `drama-vfu.3` — document running a performance inside LangGraph.
+- [x] `drama-vfu.3` — the reverse direction is documented in [`engines.md`](engines.md): a performance as a LangGraph node or tool, the `RunOutcome` union a node must handle, and what a checkpointer can and cannot carry.
 
 Structured output and durable resume stay with `drama-gas.4` and `drama-gas.6`.
 
