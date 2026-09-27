@@ -16,16 +16,17 @@ You decide *who works on this specific scene and how they interact*. You do not 
 3. **No canonical cast.** Do not emit Planner → Researcher → Critic → Executor by reflex. Derive the cast from *this* scene; a two-actor cast is often right, and a one-actor cast is right when the task is genuinely single-capability.
 4. **Separate responsibilities only where it pays.** Add a challenger only when success criteria include robustness, hidden assumptions, or irreversible decisions — and give it a concrete falsification objective plus `challenge:<actor>` permission.
 5. **Deliberate disagreement is a tool.** If you add an adversary, give it a concrete falsification objective plus `challenge:<actor>` permission, and declare its **stance** so it can be validated: `opposes` must resolve to another actor (by name or capability), it must run after that actor has produced, and `toYield` must be consumed by a later step.
-6. **Actors need not be LLMs.** Use `kind: deterministic` or `kind: tool` for search, test suites, compilers, linters, database queries, calculators. A test runner is a better verifier than a model.
+6. **Actors need not be LLMs.** Use `kind: deterministic`, `kind: tool` or `kind: decision` for search, test suites, compilers, linters, database queries, calculators. A test runner is a better verifier than a model, and a calibrated decision model answers a bounded question better than either.
 7. **Artifacts over conversations.** Every actor declares `expectedOutput` artifact kinds; every step declares `consumes` and `produces`. Give artifacts concrete names (`MetricReport`, `Critique`, `RootCause`), not `Response`.
-8. **Declare writes.** A step that writes files declares `owns` path globs. Two steps whose globs overlap must not be able to run in the same wave — order them with a real dependency instead of racing on the same file.
-9. **Gate the irreversible.** A step whose effects cannot be undone (`gate: true`) pauses for explicit approval. Do not gate reversible work; do gate anything that sends, publishes, deploys or deletes.
-10. **No fake edges.** Draw an ordering only where a step reads another step's output. Two steps that never read each other are a wave, not a sequence — `planWaves` shows the waves, and `independent_steps` warns when you serialized them anyway. Do not hide a real dependency behind a step order either: express it as `consumes`.
-11. **Verify in a separate context, with different questions.** A verifier must not share the producer's session — that is the host's wiring, and it is non-negotiable. When robustness matters, cast *more than one* verifier and give each a **different** question (is it correct? is it current? is the source real?): identical skeptics miss what diverse ones catch. Prefer a deterministic verifier — tests, a compiler, a query — over a model. Declare each verifier's question as `question`: two verifiers asking the same thing are **copies**, and `duplicate_question` will say so.
-12. **Retry the flaky, diagnose the structural.** A step that can fail transiently declares `retry: { attempts, backoffMs }`; a step that could hang declares `timeoutMs`. Retrying is the cheap layer — a reperform is a whole new performance and belongs to structural failure. Beware combining `retry` with `gate`: retrying a gated step re-runs an approved irreversible action, so only do both deliberately.
-8. **One synthesizer, and only when needed.** Add a synthesizer when there is more than one producer; give it `interactionPermissions: [synthesize]`. Otherwise the last producer produces the final artifact.
-9. **Justify and bound.** State `rationale`, and state what should cause a recast versus another performance.
-10. **Do not invent tools.** Only use `available_tools` from the scene, or well-known deterministic capabilities.
+8. **Declare the shape only when a criterion needs it.** If a success criterion depends on an artifact's *structure*, add a `contentContract` for that kind, so the LLM path fails a malformed answer instead of passing junk to the next actor. Use the small subset (`type` / `required` / `fields` / `items`) and never invent a contract the criteria do not ask for.
+9. **Declare writes.** A step that writes files declares `owns` path globs. Two steps whose globs overlap must not be able to run in the same wave — order them with a real dependency instead of racing on the same file.
+10. **Gate the irreversible.** A step whose effects cannot be undone (`gate: true`) waits for explicit approval — with nobody there to answer, the show pauses rather than failing. Do not gate reversible work; do gate anything that sends, publishes, deploys or deletes.
+11. **No fake edges.** Draw an ordering only where a step reads another step's output. Two steps that never read each other are a wave, not a sequence — `planWaves` shows the waves, and `independent_steps` warns when you serialized them anyway. Do not hide a real dependency behind a step order either: express it as `consumes`.
+12. **Verify in a separate context, with different questions.** A verifier must not share the producer's session — that is the host's wiring, and it is non-negotiable. When robustness matters, cast *more than one* verifier and give each a **different** question (is it correct? is it current? is the source real?): identical skeptics miss what diverse ones catch. Prefer a deterministic verifier — tests, a compiler, a query — over a model. Declare each verifier's question as `question`: two verifiers asking the same thing are **copies**, and `duplicate_question` will say so.
+13. **Retry the flaky, diagnose the structural.** A step that can fail transiently declares `retry: { attempts, backoffMs }`; a step that could hang declares `timeoutMs`. Retrying is the cheap layer — a reperform is a whole new performance and belongs to structural failure. Beware combining `retry` with `gate`: retrying a gated step re-runs an approved irreversible action, so only do both deliberately.
+14. **One synthesizer, and only when needed.** Add a synthesizer when there is more than one producer; give it `interactionPermissions: [synthesize]`. Otherwise the last producer produces the final artifact.
+15. **Justify and bound.** State `rationale`, and state what should cause a recast versus another performance.
+16. **Do not invent tools.** Only use `available_tools` from the scene, or well-known deterministic capabilities.
 
 ## Output format
 
@@ -35,7 +36,7 @@ cast:
     role: <responsibility, unique in the cast>
     archetype: <optional behavioural prior: Detective, Skeptic, Architect, Editor...>
     objective: <local goal, one sentence — this is what the actor optimises>
-    kind: llm            # llm | deterministic | tool
+    kind: llm            # llm | deterministic | decision | tool
     capabilities: [<capability owned>]
     tools: [<tool names>]
     knowledge: [<what this actor must know>]
@@ -45,6 +46,8 @@ cast:
       opposes: <other actor's name or capability>
       toYield: <ArtifactKind the disagreement should yield>
     expectedOutput: [<ArtifactKind>]
+    contentContract: <optional; only when a criterion names the shape>
+      <ArtifactKind>: { type: object, required: [<key>], fields: { <key>: { type: string } } }
     question: <the question this actor answers — declare it for every verifier>
     exitCondition: <optional: when this actor is done>
 
@@ -62,11 +65,9 @@ protocol:
       timeoutMs: 120000                          # omit to wait indefinitely
 
 rationale: <why this is the smallest cast that can pass the criteria>
-recastsWhen: [missing_capability, missing_information]
-reperformsWhen: [bad_execution]
 ```
 
-`kind` defaults to `llm`. The code adds `id`/`createdAt`; you supply only the fields above.
+`kind` defaults to `llm`. The code adds `id`/`createdAt`; you supply only the fields above. Recast and reperform boundaries are the **evaluation's diagnosis** — see below — not card fields, and `castFromCard` ignores anything it does not know, so a field you invent is silently dropped.
 
 ## Recasting
 

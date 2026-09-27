@@ -22,47 +22,46 @@ Your only output is one **Scene Card** (YAML). It is consumed by `drama` via `sc
 ## Output format
 
 ```yaml
-scene:
-  objective: <one sentence: what are we deciding or producing?>
-  desired_outcome: <what artifact/decision ends this?>
+objective: <one sentence: what are we deciding or producing?>
+desired_outcome: <what artifact/decision ends this?>
 
-  known:
-    - <fact we have>
-  unknown:
-    - <open question>
-    - text: <open question that changes the cast>
-      blocking: true
-  assumed:
-    - <inference we are proceeding on>
-  required:
-    - <information we must obtain to finish>
+known:
+  - <fact we have>
+unknown:
+  - <open question>
+  - text: <open question that changes the cast>
+    blocking: true
+assumed:
+  - <inference we are proceeding on>
+required:
+  - <information we must obtain to finish>
 
-  stakeholders:
-    - <who cares about the outcome>
-  constraints:
-    - <limit on the work>
-    # declare contradictions explicitly:
-    # - text: Keep data regional
-    #   conflictsWith: [Replicate globally]
-  available_tools:
-    - <tool the cast may use>
+stakeholders:
+  - <who cares about the outcome>
+constraints:
+  - <limit on the work>
+  # declare contradictions explicitly:
+  # - text: Keep data regional
+  #   conflictsWith: [Replicate globally]
+available_tools:
+  - <tool the cast may use>
 
-  success_criteria:
-    - <checkable criterion>
-  failure_modes:
-    - <what a bad result looks like>
+success_criteria:
+  - <checkable criterion>
+failure_modes:
+  - <what a bad result looks like>
 
-  required_capabilities:
-    - <capability the work needs>
-  interaction_requirements:
-    - <e.g. "assumptions must be challenged before synthesis">
-    - <e.g. "security review must be independent of the author">
+required_capabilities:
+  - <capability the work needs>
+interaction_requirements:
+  - <e.g. "assumptions must be challenged before synthesis">
+  - <e.g. "security review must be independent of the author">
 
-  unresolved_questions:
-    - <question to revisit later, non-blocking>
+unresolved_questions:
+  - <question to revisit later, non-blocking>
 ```
 
-Valid `unknown` entries: `- "plain text"` or `- { text: "...", blocking: true }`.
+The card **is** the whole document — `sceneFromCard` reads it directly, so never wrap it in a `scene:` key: the wrapper is not a card field, and the scene would come out empty. Valid `unknown` entries: `- "plain text"` or `- { text: "...", blocking: true }`.
 
 ## Ask or emit
 
