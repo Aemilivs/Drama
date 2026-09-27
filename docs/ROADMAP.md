@@ -44,9 +44,15 @@ Nothing is planned. The three items above were the deferred list; each is now do
 
 Deliberately not built: no provider client or `Distribution` type in `src/`, and no "supported decision models" list — the contract is the wire format.
 
-## LangGraph integration — planned, not built
+## LangGraph integration — verified, not adapted
 
-A drama ([`examples/langgraph/run.ts`](../examples/langgraph/run.ts)) evaluated the LangGraph path and filed the accepted work as epic `drama-vfu` plus three children (`bd show drama-vfu`). Verdict: **no adapter and no dependency** — the `createEngineExecutor` seam is sufficient, and the thing that was wrong is the recipe. Accepted work is docs integrity: correct the stale recipe (deprecated `createReactAgent`, the Node 20 floor, the `.text` trap), make it checkable on demand with `bun run verify:engines`, and document running a performance inside LangGraph. Structured output and durable resume stay with `drama-gas.4` and `drama-gas.6`.
+A drama ([`examples/langgraph/run.ts`](../examples/langgraph/run.ts)) evaluated the LangGraph path and filed the accepted work as epic `drama-vfu` (`bd show drama-vfu`). Verdict: **no adapter and no dependency** — the `createEngineExecutor` seam is sufficient, and the thing that was wrong is the recipe.
+
+- [x] `drama-vfu.1` — the recipe is corrected and date-stamped ([`engines.md`](engines.md) §1): `createAgent` instead of the deprecated `createReactAgent`, the real Node 20 floor, and the `msg.text` trap, with `responseFormat` / `structuredResponse` for typed content.
+- [ ] `drama-vfu.2` — an on-demand `bun run verify:engines` check (blocked by `.1`).
+- [ ] `drama-vfu.3` — document running a performance inside LangGraph.
+
+Structured output and durable resume stay with `drama-gas.4` and `drama-gas.6`.
 
 ## Explicit non-goals
 

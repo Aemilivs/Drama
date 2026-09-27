@@ -15,6 +15,9 @@
  * re-derives the cast, replays the performance offline, and demonstrates the
  * engine seam with the *corrected* LangGraph shape — without a LangGraph
  * dependency, exactly as the verdict requires.
+ *
+ * `drama-vfu.1` has since corrected the recipe in `docs/engines.md` section 1,
+ * so the "pinned to 1.4.17" known below is the state this drama was run against.
  */
 
 import {

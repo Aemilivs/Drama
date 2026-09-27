@@ -40,21 +40,53 @@ Because the wrapper is identical everywhere, each recipe below shows **only the 
 prose; when it does, pass that object as `content` and the artifact is validated data instead of
 text the next actor has to parse.
 
-## 1. LangGraph — `@langchain/langgraph` 1.4.17 (TS)
+## 1. LangGraph — `@langchain/langgraph` 1.4.18 (TS)
+
+Reach it through `createAgent` from the separate `langchain` package. The older `createReactAgent` is
+still exported from `@langchain/langgraph/prebuilt`, but it has been `@deprecated` since at least
+`@langchain/langgraph@1.0.0`, so the install is three packages: the graph, the provider, and
+`langchain`.
 
 ```ts
-import { createReactAgent } from "@langchain/langgraph/prebuilt";
-import { ChatAnthropic } from "@langchain/anthropic";
+import { createAgent } from "langchain";
+import { z } from "zod";
 
-const graph = createReactAgent({ llm: new ChatAnthropic({ model: "claude-sonnet-4-6" }), tools: [] });
+// `responseFormat` is what makes this a typed artifact instead of prose the next actor has to parse.
+const RiskReport = z.object({ risks: z.array(z.string()), mitigation: z.string() });
+
+const agent = createAgent({
+  model: "anthropic:claude-sonnet-4-6",   // the provider package supplies this id
+  tools: [],
+  responseFormat: RiskReport,
+});
 
 // inside invoke:
-const result = await graph.invoke({ messages: [{ role: "user", content: prompt }] });
-return { artifacts: [{ kind: "RiskReport", content: result.messages.at(-1)?.text }] };
+const result = await agent.invoke({ messages: [{ role: "user", content: prompt }] });
+
+// Read the structured answer, not the text. `msg.text` is a real getter, but it is an empty string
+// when the final message is a tool call, and it silently drops non-text blocks — so
+// `content: msg.text` can ship an empty artifact that still passes. Guard the response; a per-kind
+// contract for artifact content is drama-gas.4.
+if (!result.structuredResponse) return { artifacts: [] };
+return { artifacts: [{ kind: "RiskReport", content: result.structuredResponse }] };
 ```
 
-Docs: <https://docs.langchain.com/oss/javascript/langgraph/quickstart>. Needs Node 18+, a provider
-key, and the provider package (`@langchain/anthropic`) installed separately from the graph package.
+For a plain-text turn, `result.messages.at(-1)?.text` is still the extraction — it concatenates the
+text blocks into one string. It is the *structured* path that the text getter cannot carry.
+
+Docs: <https://docs.langchain.com/oss/javascript/langchain/agents>. **Checked 2026-09-27 UTC**
+against `@langchain/langgraph` 1.4.18, `@langchain/anthropic` 1.5.11 and `@langchain/core` 1.2.13
+(npm `latest` at that pull). Needs a provider key, and **Node 20** in practice: the graph package
+declares `>=18`, but `@langchain/core` and `@langchain/anthropic` declare `>=20`.
+
+**Sources for the claims above.** Deprecation notice: <https://unpkg.com/@langchain/langgraph@1.4.18/dist/prebuilt/react_agent_executor.d.ts>.
+The `text` getter and the `content` type: <https://github.com/langchain-ai/langchainjs/blob/main/libs/langchain-core/src/messages/base.ts>.
+`createAgent` with `responseFormat`: <https://docs.langchain.com/oss/javascript/langchain/agents>.
+The `engines.node` fields: <https://registry.npmjs.org/@langchain/langgraph/latest>,
+<https://registry.npmjs.org/@langchain/core/latest>, <https://registry.npmjs.org/@langchain/anthropic/latest>.
+
+**The other four recipes on this page have not been checked this way yet** — treat their pinned
+versions and runtime floors the same way until they are.
 
 ## 2. OpenAI Agents SDK — `@openai/agents` 0.18.0 (TS)
 
