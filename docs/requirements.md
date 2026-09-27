@@ -89,6 +89,18 @@ A calibrated check returns a probability; the library owns the threshold policy 
 | R-TRACE-1 | The rendered trace names the scene, cast, activations, evaluation and result. | `formatPerformance` output contains objective, cast id, actor name, `Evaluation: pass`, `Result: done`. |
 | R-TRACE-2 | The timeline is one JSON record per event. | `performanceTimeline(performance).length === performance.events.length`, every line parses. |
 
+## OpenTelemetry export — `test/requirements/otel.requirements.test.ts`
+
+An adapter, not a core change: `ActorTurn` already carries the timings, status, actor and usage a span needs. drama emits the OTLP/JSON shape and the host ships it; the library makes no network call and adds no dependency.
+
+| ID | Requirement (abstract) | Concrete example |
+| --- | --- | --- |
+| R-OTEL-1 | A performance becomes a root span, one per iteration and one per turn. | 1 root + 1 iteration + 2 turns; parents link; one trace id; every span id distinct. |
+| R-OTEL-2 | The mapping is deterministic and does not touch the performance. | Two exports are deep-equal; the performance JSON is byte-identical; ids differ across performances. |
+| R-OTEL-3 | Status, timing and usage land on the right span. | Failed turn → `STATUS_CODE_ERROR` with its message; usage attributes; nanos are the turn's ms × 1e6. |
+| R-OTEL-4 | The document is OTLP-shaped and wraps exactly those spans. | `resourceSpans[0].resource` carries `service.name`; the scope holds `performanceToSpans` unchanged. |
+| R-OTEL-5 | A paused performance is neither an error nor a success, and names its gate. | Root status `UNSET`, `drama.gate.step` on the root, no turn spans, zero timestamps. |
+
 ## Cross-cutting — `test/requirements/cross.requirements.test.ts`
 
 | ID | Requirement (abstract) | Concrete example |

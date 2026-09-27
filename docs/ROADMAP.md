@@ -58,7 +58,7 @@ Structured output and durable resume stay with `drama-gas.4` and `drama-gas.6`.
 
 - [x] `drama-gas.4` — an optional per-kind artifact **content contract**, validated on the LLM path (`R-CONTRACT-1..6`).
 - [x] `drama-gas.6` — a gate nobody is there to answer **pauses**; the paused `Performance` is the ordinary serialization, and `resume` continues it (`R-RESUME-1..6`).
-- [ ] `drama-gas.5` — export a performance trace as OpenTelemetry-shaped spans.
+- [x] `drama-gas.5` — `performanceToSpans` / `performanceToOtlp`: the trace as OTLP-shaped spans, zero dependencies, deterministic (`R-OTEL-1..5`).
 
 Streaming, memory/RAG, an MCP client, per-actor model routing and deployment stay non-goals.
 

@@ -114,6 +114,9 @@ export type {
   ContentContracts,
 } from "./contract";
 
+export { performanceToSpans, performanceToOtlp } from "./otel";
+export type { Span, SpanAttribute, SpanStatus, OtlpDocument, OtlpOptions } from "./otel";
+
 export type {
   Evaluation,
   EvaluationContext,

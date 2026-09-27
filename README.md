@@ -459,6 +459,7 @@ so the audition itself is performed by the orchestrating agent — the libraries
 | `Persona` / `Audition` | A recognisable performer that declares nothing about its fit, and the casting call that binds it to a role. | `src/persona.ts` |
 | `serializePerformance` | Versioned JSON round-trip; re-attaches executors by actor name for replay. | `src/serialize.ts` |
 | `Artifact` | Structured, named output exchanged between actors (`ResearchReport`, `Critique`, `RootCause`, …). | `src/types.ts` |
+| `performanceToSpans` / `performanceToOtlp` | The trace as OpenTelemetry-shaped spans, or the whole OTLP/JSON document for a host to export. Pure and deterministic. | `src/otel.ts` |
 
 ### Project layout
 
@@ -475,6 +476,7 @@ src/
   stage.ts       StageManager, Performance, waves, gates, recast/redesign loop
   serialize.ts   Performance JSON round-trip and replay
   trace.ts       formatPerformance, performanceTimeline
+  otel.ts        performanceToSpans / performanceToOtlp (OTLP-shaped, zero-dependency)
   index.ts       public surface
 .opencode/       skills, project tool, audition libraries
 examples/        incident-rca · audition · llm · anthropic · decision-models · langgraph · providers
