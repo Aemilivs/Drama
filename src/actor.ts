@@ -10,6 +10,8 @@ import type { Artifact } from "./types";
 import { nextId } from "./types";
 import type { Scene } from "./scene";
 import type { Persona } from "./persona";
+import type { ContentContracts } from "./contract";
+import { describeShape, validateArtifacts } from "./contract";
 
 export type ActorKind = "llm" | "deterministic" | "decision" | "tool";
 
@@ -68,6 +70,12 @@ export interface Actor {
   interactionPermissions: string[];
   /** Artifact kinds this actor is expected to produce. */
   expectedOutput: string[];
+  /**
+   * Optional per-kind content contracts for those artifacts, keyed by kind. An
+   * executor that validates them turns a malformed answer into a failed turn
+   * instead of letting the next actor discover it.
+   */
+  contentContract?: ContentContracts;
   exitCondition?: string;
   /**
    * The question this actor answers. A verifier must declare it, so that two
@@ -168,6 +176,7 @@ export function createActor(
     constraints: partial.constraints?.slice() ?? [],
     interactionPermissions: partial.interactionPermissions?.slice() ?? [],
     expectedOutput: partial.expectedOutput?.slice() ?? [],
+    contentContract: partial.contentContract,
     exitCondition: partial.exitCondition,
     question: partial.question,
     stance: partial.stance,
@@ -280,6 +289,15 @@ export function renderActorPrompt(ctx: ActorContext): ChatMessage[] {
   if (actor.expectedOutput.length) {
     system.push(`Produce artifact kind(s): ${actor.expectedOutput.join(", ")}`);
   }
+  if (actor.contentContract) {
+    for (const [kind, contract] of Object.entries(actor.contentContract)) {
+      system.push(
+        typeof contract === "function"
+          ? `Content contract for ${kind}: must satisfy the host's validator`
+          : `Content contract for ${kind}: ${describeShape(contract)}`,
+      );
+    }
+  }
   if (actor.exitCondition) system.push(`Exit condition: ${actor.exitCondition}`);
 
   const inputs = ctx.inputs.length
@@ -311,8 +329,12 @@ export function createLlmExecutor(
 ): ActorExecutor {
   return async (ctx) => {
     const text = await chat(renderActorPrompt(ctx), ctx);
-    if (options.parse) return options.parse(text, ctx);
-    const kind = ctx.actor.expectedOutput[0] ?? "Answer";
-    return ok([artifact(ctx.actor.name, kind, text)]);
+    const output = options.parse
+      ? options.parse(text, ctx)
+      : ok([artifact(ctx.actor.name, ctx.actor.expectedOutput[0] ?? "Answer", text)]);
+    if (output.status === "failed") return output;
+    const problem = validateArtifacts(ctx.actor.contentContract, output.artifacts);
+    if (problem) return failed(problem, output.artifacts, output.usage);
+    return output;
   };
 }

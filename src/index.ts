@@ -99,6 +99,21 @@ export type {
   DeclaredArtifact,
 } from "./engines";
 
+export {
+  validateShape,
+  checkContent,
+  validateArtifacts,
+  describeShape,
+  normalizeContracts,
+} from "./contract";
+export type {
+  Shape,
+  ShapeType,
+  ContentCheck,
+  ContentContract,
+  ContentContracts,
+} from "./contract";
+
 export type {
   Evaluation,
   EvaluationContext,

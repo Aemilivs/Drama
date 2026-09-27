@@ -166,6 +166,19 @@ The production path for real models is a plain `fetch` call to an OpenAI-compati
 | R-LLM-3 | A model-backed performance runs end to end. | Fake model → `done`, an `Answer` artifact with the model's text. |
 | R-LLM-4 | A failing endpoint surfaces as an error, not a silent answer. | HTTP 500 → the error propagates. |
 
+## Artifact contracts — `test/requirements/contract.requirements.test.ts`
+
+`expectedOutput` names artifact kinds; a contract says what the content must look like. It is opt-in, either a declarative shape or a host check, and the LLM path turns a mismatch into a failed turn.
+
+| ID | Requirement (abstract) | Concrete example |
+| --- | --- | --- |
+| R-CONTRACT-1 | A declarative shape accepts conforming content and names the first mismatch. | `required: [risks, mitigation]`; `{risks: [1]}` → `content.risks[0] must be string, got number`. |
+| R-CONTRACT-2 | A host check may refuse, and a throw is a refusal with its message. | `() => "needs a mitigation"` → that text; a throwing check → its message, never an escape. |
+| R-CONTRACT-3 | A mismatch fails the turn, keeps the artifacts and shows the reason. | A missing `mitigation` → `failed`, with the artifact kind and the path in `error`. |
+| R-CONTRACT-4 | A card carries contracts, and malformed entries are dropped. | `contentContract` / `content_contract` accepted; `42` and an empty kind are discarded. |
+| R-CONTRACT-5 | The prompt asks for the shape, so the model can comply. | A declared shape → `Content contract for RiskReport: object{mitigation: string}`. |
+| R-CONTRACT-6 | Without a contract nothing changes, and a failed parse is left alone. | No contract hint in the prompt; a `failed` parse keeps its own error. |
+
 ## Persistent store — `test/requirements/audition-store.requirements.test.ts`
 
 The in-memory store is the default; the host may persist it so refusals and approaches survive sessions (`.opencode/lib/audition-store.ts`).

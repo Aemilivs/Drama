@@ -235,6 +235,36 @@ To run the **whole lifecycle** — design, cast, perform, evaluate, recast — c
 It returns `{ kind: "needs_input", questions }` when a blocking unknown must be resolved first,
 otherwise `{ kind: "performance", performance }`.
 
+### Keep artifact content honest
+
+`expectedOutput` names artifact *kinds*; it says nothing about their content. Declare a **content
+contract** per kind and the LLM path validates it, so a malformed answer becomes a failed turn with
+the reason in the trace instead of a surprise for the next actor:
+
+```ts
+const analyst = createActor({
+  name: "analyst", role: "migration analyst", objective: "Assess the migration",
+  expectedOutput: ["RiskReport"],
+  contentContract: {
+    // A small, dependency-free subset...
+    RiskReport: {
+      type: "object",
+      required: ["risks", "mitigation"],
+      fields: {
+        risks: { type: "array", items: { type: "string" } },
+        mitigation: { type: "string" },
+      },
+    },
+    // ...or your own check: (content) => true | "why it failed".
+  },
+});
+```
+
+The contract is also rendered into the prompt as a hint (`Content contract for RiskReport:
+object{risks: array<string>, mitigation: string}`), so a model can comply rather than guess. Contracts
+are **opt-in**: an actor without one behaves exactly as before. A mismatch fails the turn and keeps
+the artifacts — a validation failure is evidence, not a thrown exception.
+
 ### Wire in a real model
 
 Any model enters through one function; non-LLM actors need no adapter at all:
@@ -417,6 +447,7 @@ src/
   types.ts       shared primitives (Status, Artifact, Diagnosis, ids)
   scene.ts       Scene, SceneCard, SceneDesigner, conflict detection
   actor.ts       Actor, executors, tools, LLM adapter
+  contract.ts    optional artifact content contracts (declarative shapes + host checks)
   cast.ts        Cast, Protocol, CastingDirector, minimality, planWaves, card normalisers
   evaluation.ts  Evaluation, Evaluator, diagnosis → action
   persona.ts     Persona, Audition, Auditioner, AuditionStore, dressCast

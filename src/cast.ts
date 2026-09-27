@@ -11,6 +11,7 @@ import type { Diagnosis } from "./types";
 import { nextId } from "./types";
 import type { Scene } from "./scene";
 import { type Actor, type ActorKind, type ActorStance, createActor } from "./actor";
+import { normalizeContracts } from "./contract";
 import type { Evaluation } from "./evaluation";
 
 /**
@@ -319,6 +320,9 @@ export interface ActorCard {
   interactionPermissions?: string[];
   expectedOutput?: string[] | string;
   produces?: string[] | string;
+  /** Optional per-kind artifact content contracts, keyed by artifact kind. */
+  contentContract?: unknown;
+  content_contract?: unknown;
   exitCondition?: string;
   /** The question this actor answers — a verifier should always declare one. */
   question?: string;
@@ -361,6 +365,7 @@ export function actorFromCard(card: ActorCard): Actor {
     constraints: readStrings(source.constraints),
     interactionPermissions: readStrings(source.interactionPermissions),
     expectedOutput: readStrings(source.expectedOutput ?? source.produces),
+    contentContract: normalizeContracts(source.contentContract ?? source.content_contract),
     exitCondition: typeof source.exitCondition === "string" ? source.exitCondition : undefined,
     question: typeof source.question === "string" ? source.question : undefined,
     stance: readStance(source.stance),
