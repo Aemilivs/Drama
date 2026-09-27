@@ -44,6 +44,10 @@ Nothing is planned. The three items above were the deferred list; each is now do
 
 Deliberately not built: no provider client or `Distribution` type in `src/`, and no "supported decision models" list — the contract is the wire format.
 
+## LangGraph integration — planned, not built
+
+A drama ([`examples/langgraph/run.ts`](../examples/langgraph/run.ts)) evaluated the LangGraph path and filed the accepted work as epic `drama-vfu` plus three children (`bd show drama-vfu`). Verdict: **no adapter and no dependency** — the `createEngineExecutor` seam is sufficient, and the thing that was wrong is the recipe. Accepted work is docs integrity: correct the stale recipe (deprecated `createReactAgent`, the Node 20 floor, the `.text` trap), make it checkable on demand with `bun run verify:engines`, and document running a performance inside LangGraph. Structured output and durable resume stay with `drama-gas.4` and `drama-gas.6`.
+
 ## Explicit non-goals
 
 - No persistence layer, scheduler, or queue.

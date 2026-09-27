@@ -174,6 +174,7 @@ Runnable examples, all offline by default:
 | [`examples/llm/run.ts`](examples/llm/run.ts) | the production LLM path (self-explains when unconfigured) |
 | [`examples/anthropic/run.ts`](examples/anthropic/run.ts) | the same production, on Claude |
 | [`examples/decision-models/run.ts`](examples/decision-models/run.ts) | a decision model as a calibrated evaluator, and a `decision` actor |
+| [`examples/langgraph/run.ts`](examples/langgraph/run.ts) | a planning drama: evaluate the LangGraph integration and plan it in beads |
 
 ### Use it as a library
 
@@ -425,7 +426,7 @@ src/
   trace.ts       formatPerformance, performanceTimeline
   index.ts       public surface
 .opencode/       skills, project tool, audition libraries
-examples/        incident-rca · audition · llm · anthropic · decision-models · providers
+examples/        incident-rca · audition · llm · anthropic · decision-models · langgraph · providers
 test/            behavioural tests and formalized requirements
 docs/            architecture · actors · decision-models · engines · graph-engineering · install · prior-art · requirements · ROADMAP
 ```
