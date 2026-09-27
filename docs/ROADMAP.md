@@ -49,7 +49,7 @@ Deliberately not built: no provider client or `Distribution` type in `src/`, and
 A drama ([`examples/langgraph/run.ts`](../examples/langgraph/run.ts)) evaluated the LangGraph path and filed the accepted work as epic `drama-vfu` (`bd show drama-vfu`). Verdict: **no adapter and no dependency** — the `createEngineExecutor` seam is sufficient, and the thing that was wrong is the recipe.
 
 - [x] `drama-vfu.1` — the recipe is corrected and date-stamped ([`engines.md`](engines.md) §1): `createAgent` instead of the deprecated `createReactAgent`, the real Node 20 floor, and the `msg.text` trap, with `responseFormat` / `structuredResponse` for typed content.
-- [ ] `drama-vfu.2` — an on-demand `bun run verify:engines` check (blocked by `.1`).
+- [x] `drama-vfu.2` — `bun run verify:engines`: installs the pinned LangGraph packages outside the repo, runs a real graph (fake model, no key) through the seam, and exits non-zero on drift or on an install failure. A docs-integrity checker: no dependency, and neither `tsc` nor `bun test` ever touches it.
 - [ ] `drama-vfu.3` — document running a performance inside LangGraph.
 
 Structured output and durable resume stay with `drama-gas.4` and `drama-gas.6`.

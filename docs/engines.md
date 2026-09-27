@@ -29,6 +29,10 @@ becomes a `failed` output, never an exception escaping into the stage.
 
 Because the wrapper is identical everywhere, each recipe below shows **only the engine call**.
 
+A recipe is prose until something checks it. `bun run verify:engines` installs the pinned LangGraph
+packages into an out-of-repo cache dir and runs one real graph through the seam — no dependency, no
+API key, never part of `bun test`. The other four recipes are not checked this way yet.
+
 ## The contract
 
 | Direction | Shape |

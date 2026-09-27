@@ -13,7 +13,8 @@
     "test": "bun test",
     "example": "bun run examples/incident-rca/run.ts",
     "typecheck": "tsc --noEmit",
-    "setup:kev": "bun run scripts/setup-kev.ts"
+    "setup:kev": "bun run scripts/setup-kev.ts",
+    "verify:engines": "bun run scripts/verify-engines.ts"
   },
   "devDependencies": {
     "@opencode-ai/plugin": "1.18.31",
